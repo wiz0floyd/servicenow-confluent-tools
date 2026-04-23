@@ -1,0 +1,43 @@
+# PEM files — contain private keys, never commit
+*.pem
+
+# Java keystores — contain private keys, never commit
+*.jks
+*.p12
+*.pfx
+keystore/
+truststore/
+
+# Confluent properties files (may contain inline certs/keys)
+*.properties
+
+# Real config with live IDs — use link.conf.example as template
+link.conf
+local/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Internal planning docs (not for distribution)
+docs/superpowers/

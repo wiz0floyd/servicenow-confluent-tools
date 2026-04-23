@@ -1,0 +1,5 @@
+[confluent]
+environment_id   = env-xxxxxx
+cluster_id       = lkc-xxxxxx
+link_name        = my-cluster-link
+source_bootstrap = broker1.example.com:9093,broker2.example.com:9093
