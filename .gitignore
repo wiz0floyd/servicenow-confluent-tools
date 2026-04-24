@@ -7,6 +7,8 @@
 *.pfx
 keystore/
 truststore/
+keystore
+truststore
 
 # Confluent properties files (may contain inline certs/keys)
 *.properties
@@ -44,3 +46,6 @@ Thumbs.db
 
 # Internal planning docs (not for distribution)
 docs/superpowers/
+
+#Claude
+.claude/
