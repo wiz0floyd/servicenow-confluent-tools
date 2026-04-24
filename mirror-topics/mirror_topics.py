@@ -2,6 +2,7 @@
 #
 # Setup: pip install -r requirements.txt
 # Usage: python mirror_topics.py [--config PATH] [--pem-dir PATH] [--filter PREFIX] [--all] [--dry-run]
+#        --all accepts optional filters: --include-prefixes, --exclude-prefixes, --include-topics, --exclude-topics
 
 import argparse
 import configparser
@@ -10,6 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 from kafka import KafkaConsumer
 
@@ -120,24 +122,66 @@ def get_mirrored_source_topics(cfg: dict) -> set:
     return source_names
 
 
-def enable_auto_mirror(cfg: dict, dry_run: bool) -> None:
+def build_mirror_filters(
+    include_prefixes: list = None,
+    exclude_prefixes: list = None,
+    include_topics: list = None,
+    exclude_topics: list = None,
+) -> str | None:
+    """Build the auto.create.mirror.topics.filters JSON value, or None if no filters given."""
+    entries = []
+    for name in (include_prefixes or []):
+        entries.append({"filterType": "INCLUDE", "name": name, "patternType": "PREFIXED"})
+    for name in (exclude_prefixes or []):
+        entries.append({"filterType": "EXCLUDE", "name": name, "patternType": "PREFIXED"})
+    for name in (include_topics or []):
+        entries.append({"filterType": "INCLUDE", "name": name, "patternType": "LITERAL"})
+    for name in (exclude_topics or []):
+        entries.append({"filterType": "EXCLUDE", "name": name, "patternType": "LITERAL"})
+    return json.dumps({"topicFilters": entries}) if entries else None
+
+
+def enable_auto_mirror(
+    cfg: dict,
+    dry_run: bool,
+    include_prefixes: list = None,
+    exclude_prefixes: list = None,
+    include_topics: list = None,
+    exclude_topics: list = None,
+) -> None:
+    filters_json = build_mirror_filters(include_prefixes, exclude_prefixes, include_topics, exclude_topics)
+    lines = ["auto.create.mirror.topics.enable=true"]
+    if filters_json:
+        lines.append(f"auto.create.mirror.topics.filters={filters_json}")
+
     for port in cfg.get("source_clusters", SN_SOURCE_CLUSTERS):
         link = cfg[f"link_name_{port}"]
-        cmd = [
-            "confluent", "kafka", "link", "configuration", "update", link,
-            "--environment", cfg["environment_id"],
-            "--cluster", cfg["cluster_id"],
-            "--config", "auto.create.mirror.topics.enable=true",
-        ]
-        if dry_run:
-            print("Dry run — would execute:")
-            print("  " + " ".join(cmd))
-            continue
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            sys.exit(1)
-        print(f"Auto-mirror enabled on {link}.")
+        # Write config to a temp file — the CLI's --config CSV parser can't handle
+        # JSON values with embedded quotes when passed inline.
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".properties", delete=False) as f:
+            f.write("\n".join(lines))
+            config_path = f.name
+        try:
+            cmd = [
+                "confluent", "kafka", "link", "configuration", "update", link,
+                "--environment", cfg["environment_id"],
+                "--cluster", cfg["cluster_id"],
+                "--config", config_path,
+            ]
+            if dry_run:
+                print("Dry run — would execute:")
+                print("  " + " ".join(cmd))
+                print("  Config file contents:")
+                for line in lines:
+                    print(f"    {line}")
+                continue
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(result.stderr, file=sys.stderr)
+                sys.exit(1)
+            print(f"Auto-mirror enabled on {link}.")
+        finally:
+            os.unlink(config_path)
 
 
 def create_mirror_topics(cfg: dict, topics: list, dry_run: bool) -> list:
@@ -213,6 +257,14 @@ def main() -> None:
                         help="Pre-filter topics by prefix before showing UI")
     parser.add_argument("--all", action="store_true",
                         help="Enable auto-mirror on both links (skip UI)")
+    parser.add_argument("--include-prefixes", nargs="+", metavar="PREFIX",
+                        help="(--all only) Auto-mirror topics matching these prefixes")
+    parser.add_argument("--exclude-prefixes", nargs="+", metavar="PREFIX",
+                        help="(--all only) Skip topics matching these prefixes")
+    parser.add_argument("--include-topics", nargs="+", metavar="TOPIC",
+                        help="(--all only) Auto-mirror these exact topic names")
+    parser.add_argument("--exclude-topics", nargs="+", metavar="TOPIC",
+                        help="(--all only) Skip these exact topic names")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print commands without executing")
     args = parser.parse_args()
@@ -223,7 +275,14 @@ def main() -> None:
     ca, cert, key = load_pem_files(args.pem_dir)
 
     if args.all:
-        enable_auto_mirror(cfg, dry_run=args.dry_run)
+        enable_auto_mirror(
+            cfg,
+            dry_run=args.dry_run,
+            include_prefixes=args.include_prefixes,
+            exclude_prefixes=args.exclude_prefixes,
+            include_topics=args.include_topics,
+            exclude_topics=args.exclude_topics,
+        )
         return
 
     effective_filter = args.filter or cfg["instance_name"]
