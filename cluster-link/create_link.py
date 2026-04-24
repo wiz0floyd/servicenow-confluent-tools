@@ -19,7 +19,16 @@ import tempfile
 import time
 
 
-REQUIRED_KEYS = ("environment_id", "cluster_id", "link_name", "source_bootstrap")
+REQUIRED_KEYS = ("environment_id", "cluster_id", "link_name")
+
+# ServiceNow active-active: base port for each source cluster, 4 brokers each
+SN_SOURCE_CLUSTERS = [4100, 4200]
+SN_BROKERS_PER_CLUSTER = 4
+
+
+def sn_bootstrap(host: str, base_port: int) -> str:
+    """Build a bootstrap string for one ServiceNow source cluster."""
+    return ",".join(f"{host}:{base_port + i}" for i in range(SN_BROKERS_PER_CLUSTER))
 
 CONFLUENT_INSTALL = """\
 Confluent CLI not found. Install it:
@@ -47,6 +56,13 @@ def load_config(path: str) -> dict:
         if key not in section:
             print(f"Error: Missing key in link.conf: {key}", file=sys.stderr)
             sys.exit(1)
+    if "source_bootstrap" not in section and "source_host" not in section:
+        print(
+            "Error: Missing key in link.conf: source_bootstrap "
+            "(or source_host for ServiceNow dual-cluster mode)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     return dict(section)
 
 
@@ -133,13 +149,14 @@ def build_ssl_properties(
 
 def build_link_command(cfg: dict, properties_file: str) -> list:
     """Return the confluent kafka link create command as a list of strings."""
-    return [
+    cmd = [
         "confluent", "kafka", "link", "create", cfg["link_name"],
         "--environment", cfg["environment_id"],
         "--cluster", cfg["cluster_id"],
         "--source-bootstrap-server", cfg["source_bootstrap"],
         "--config-file", properties_file,
     ]
+    return cmd
 
 
 def run_link_create(command: list, dry_run: bool) -> None:
@@ -269,36 +286,55 @@ def main() -> None:
 
     cfg = load_config(args.config)
     ca_pem, client_cert, client_key = load_pem_files(args.pem_dir)
-    ssl_props = build_ssl_properties(
-        ca_pem, client_cert, client_key,
-        literal_newlines=args.literal_newlines,
-        key_password=args.key_password,
-    )
 
     if args.copy_config:
+        ssl_props = build_ssl_properties(ca_pem, client_cert, client_key,
+                                         literal_newlines=args.literal_newlines,
+                                         key_password=args.key_password)
         copy_security_config(ssl_props)
         return
 
     check_confluent_cli()
     check_auth(cfg["environment_id"], cfg["cluster_id"])
 
-    # Write temp properties file; always delete in finally block
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".properties", delete=False, encoding="utf-8"
-    )
-    try:
-        tmp.write(ssl_props)
-        tmp.flush()
-        tmp.close()
-        command = build_link_command(cfg, tmp.name)
-        run_link_create(command, dry_run=args.dry_run)
-    finally:
-        if os.path.exists(tmp.name):
-            os.unlink(tmp.name)
+    # Expand ServiceNow dual-cluster: one link per source cluster (4100, 4200).
+    # Both links run simultaneously and are always active — this is not a
+    # primary/failover setup. ServiceNow publishes to both clusters; Confluent
+    # mirrors both. Topic prefixes make the source explicit:
+    #   4100.<topic>  — mirrored from the 4100 source cluster
+    #   4200.<topic>  — mirrored from the 4200 source cluster
+    # Downstream consumers subscribe to both and handle deduplication.
+    if "source_host" in cfg:
+        links = [
+            {**cfg, "link_name": f"{cfg['link_name']}-4100", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4100)},
+            {**cfg, "link_name": f"{cfg['link_name']}-4200", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4200)},
+        ]
+    else:
+        links = [cfg]
 
-    if not args.dry_run:
-        wait_for_link_active(cfg, timeout=args.timeout)
-        print(f"Cluster Link '{cfg['link_name']}' is ACTIVE.")
+    props = build_ssl_properties(
+        ca_pem, client_cert, client_key,
+        literal_newlines=args.literal_newlines,
+        key_password=args.key_password,
+    )
+
+    for link_cfg in links:
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".properties", delete=False, encoding="utf-8"
+        )
+        try:
+            tmp.write(props)
+            tmp.flush()
+            tmp.close()
+            command = build_link_command(link_cfg, tmp.name)
+            run_link_create(command, dry_run=args.dry_run)
+        finally:
+            if os.path.exists(tmp.name):
+                os.unlink(tmp.name)
+
+        if not args.dry_run:
+            wait_for_link_active(link_cfg, timeout=args.timeout)
+            print(f"Cluster Link '{link_cfg['link_name']}' is ACTIVE.")
 
 
 if __name__ == "__main__":
