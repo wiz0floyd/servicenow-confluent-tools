@@ -373,3 +373,18 @@ def test_wait_for_link_active_handles_describe_failure(capsys):
         with patch("time.sleep"):
             wait_for_link_active(CFG, timeout=60)
     assert "ACTIVE" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# build_link_properties
+# ---------------------------------------------------------------------------
+
+def test_dual_link_properties_include_4100_prefix():
+    from create_link import build_link_properties
+    props = build_link_properties(4100)
+    assert "cluster.link.prefix=4100." in props
+
+def test_dual_link_properties_include_4200_prefix():
+    from create_link import build_link_properties
+    props = build_link_properties(4200)
+    assert "cluster.link.prefix=4200." in props

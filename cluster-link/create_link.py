@@ -250,6 +250,11 @@ def wait_for_link_active(cfg: dict, timeout: int = 60, interval: int = 5) -> Non
     sys.exit(1)
 
 
+def build_link_properties(port: int) -> str:
+    """Return the cluster.link.prefix line for the given source port."""
+    return f"cluster.link.prefix={port}.\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create a Confluent Cloud Cluster Link using extracted PEM files."
@@ -312,13 +317,14 @@ def main() -> None:
     else:
         links = [cfg]
 
-    props = build_ssl_properties(
-        ca_pem, client_cert, client_key,
-        literal_newlines=args.literal_newlines,
-        key_password=args.key_password,
-    )
-
     for link_cfg in links:
+        port = 4100 if link_cfg["link_name"].endswith("-4100") else 4200
+        props = build_ssl_properties(
+            ca_pem, client_cert, client_key,
+            literal_newlines=args.literal_newlines,
+            key_password=args.key_password,
+        ) + build_link_properties(port)
+
         tmp = tempfile.NamedTemporaryFile(
             mode="w", suffix=".properties", delete=False, encoding="utf-8"
         )
