@@ -2,6 +2,8 @@
 
 A collection of CLI tools for integrating ServiceNow's Kafka infrastructure with Confluent Cloud.
 
+> **Disclaimer:** This is personal work and is not supported, endorsed, or affiliated with ServiceNow or Confluent. Use at your own risk.
+
 ## Tools
 
 | Tool | Description |
