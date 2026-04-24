@@ -12,6 +12,7 @@ VALID_CONFIG = textwrap.dedent("""\
     cluster_id     = lkc-abc123
     link_name      = servicenow-link
     source_host    = hermes1.service-now.com
+    instance_name  = snc.myinstance
 """)
 
 
@@ -54,17 +55,35 @@ def test_load_config_exits_if_no_source_host(tmp_path):
     assert exc.value.code == 1
 
 
+def test_load_config_exits_if_no_instance_name(tmp_path):
+    from mirror_topics import load_config
+    bad = textwrap.dedent("""\
+        [confluent]
+        environment_id = env-abc123
+        cluster_id     = lkc-abc123
+        link_name      = servicenow-link
+        source_host    = hermes1.service-now.com
+    """)
+    with pytest.raises(SystemExit) as exc:
+        load_config(write_config(tmp_path, bad))
+    assert exc.value.code == 1
+
+
+def test_load_config_exposes_instance_name(tmp_path):
+    from mirror_topics import load_config
+    cfg = load_config(write_config(tmp_path))
+    assert cfg["instance_name"] == "snc.myinstance"
+
+
 # ---------------------------------------------------------------------------
 # list_source_topics
 # ---------------------------------------------------------------------------
 
 def test_list_source_topics_returns_sorted_list():
     from mirror_topics import list_source_topics
-    mock_admin = MagicMock()
-    mock_admin.list_topics.return_value = MagicMock(
-        topics={"zebra": None, "alpha": None, "__consumer_offsets": None}
-    )
-    with patch("mirror_topics.KafkaAdminClient", return_value=mock_admin):
+    mock_consumer = MagicMock()
+    mock_consumer.topics.return_value = {"zebra", "alpha", "__consumer_offsets"}
+    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
         topics = list_source_topics("hermes1.service-now.com", 4100, "ca", "cert", "key")
     assert topics == ["alpha", "zebra"]
     assert "__consumer_offsets" not in topics
@@ -72,11 +91,9 @@ def test_list_source_topics_returns_sorted_list():
 
 def test_list_source_topics_applies_filter():
     from mirror_topics import list_source_topics
-    mock_admin = MagicMock()
-    mock_admin.list_topics.return_value = MagicMock(
-        topics={"sn_foo": None, "sn_bar": None, "other": None}
-    )
-    with patch("mirror_topics.KafkaAdminClient", return_value=mock_admin):
+    mock_consumer = MagicMock()
+    mock_consumer.topics.return_value = {"sn_foo", "sn_bar", "other"}
+    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
         topics = list_source_topics(
             "hermes1.service-now.com", 4100, "ca", "cert", "key", filter_prefix="sn_"
         )
@@ -86,9 +103,9 @@ def test_list_source_topics_applies_filter():
 
 def test_list_source_topics_exits_on_connection_error(capsys):
     from mirror_topics import list_source_topics
-    mock_admin = MagicMock()
-    mock_admin.list_topics.side_effect = Exception("Connection refused")
-    with patch("mirror_topics.KafkaAdminClient", return_value=mock_admin):
+    mock_consumer = MagicMock()
+    mock_consumer.topics.side_effect = Exception("Connection refused")
+    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
         with pytest.raises(SystemExit) as exc:
             list_source_topics("hermes1.service-now.com", 4100, "ca", "cert", "key")
     assert exc.value.code == 1

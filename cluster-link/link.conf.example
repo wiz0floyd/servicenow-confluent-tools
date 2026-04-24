@@ -26,3 +26,4 @@ source_bootstrap = broker1.example.com:9093,broker2.example.com:9093
 # cluster_id     = lkc-xxxxxx
 # link_name      = servicenow-link
 # source_host    = hermes1.service-now.com
+# instance_name  = snc.yourinstance   # topic prefix filter for mirror-topics tool

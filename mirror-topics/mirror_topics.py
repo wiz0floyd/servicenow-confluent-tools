@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 
-from kafka import KafkaAdminClient
+from kafka import KafkaConsumer
 
 INTERNAL_TOPIC_PREFIXES = ("__", "_confluent")
 SN_BROKERS_PER_CLUSTER = 4
@@ -37,7 +37,7 @@ def load_config(path: str) -> dict:
         print("Error: link.conf is missing the [confluent] section.", file=sys.stderr)
         sys.exit(1)
     section = cfg["confluent"]
-    for key in ("environment_id", "cluster_id", "link_name", "source_host"):
+    for key in ("environment_id", "cluster_id", "link_name", "source_host", "instance_name"):
         if key not in section:
             print(f"Error: Missing key in link.conf: {key}", file=sys.stderr)
             sys.exit(1)
@@ -57,21 +57,21 @@ def list_source_topics(
 ) -> list:
     bootstrap = ",".join(f"{host}:{base_port + i}" for i in range(SN_BROKERS_PER_CLUSTER))
     try:
-        admin = KafkaAdminClient(
+        consumer = KafkaConsumer(
             bootstrap_servers=bootstrap,
             security_protocol="SSL",
             ssl_cafile=ca_path,
             ssl_certfile=cert_path,
             ssl_keyfile=key_path,
         )
-        metadata = admin.list_topics()
-        admin.close()
+        raw_topics = consumer.topics()
+        consumer.close()
     except Exception as exc:
         print(f"Error: Failed to connect to source brokers: {exc}", file=sys.stderr)
         sys.exit(1)
 
     topics = [
-        t for t in metadata.topics
+        t for t in raw_topics
         if not any(t.startswith(p) for p in INTERNAL_TOPIC_PREFIXES)
     ]
     if filter_prefix:
@@ -211,13 +211,13 @@ def main() -> None:
         enable_auto_mirror(cfg, dry_run=args.dry_run)
         return
 
+    effective_filter = args.filter or cfg["instance_name"]
     topics = list_source_topics(
-        cfg["source_host"], 4100, ca, cert, key, filter_prefix=args.filter
+        cfg["source_host"], 4100, ca, cert, key, filter_prefix=effective_filter
     )
 
     if not topics:
-        msg = (f"No topics found matching filter '{args.filter}'."
-               if args.filter else "No topics found on source cluster.")
+        msg = f"No topics found matching filter '{effective_filter}'."
         print(msg)
         return
 
