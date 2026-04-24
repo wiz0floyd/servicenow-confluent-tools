@@ -31,6 +31,9 @@ env/
 .coverage
 htmlcov/
 
+# Git worktrees
+.worktrees/
+
 # Editors / OS
 .DS_Store
 Thumbs.db
