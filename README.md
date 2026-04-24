@@ -4,6 +4,10 @@ A collection of CLI tools for integrating ServiceNow's Kafka infrastructure with
 
 > **Disclaimer:** This is personal work and is not supported, endorsed, or affiliated with ServiceNow or Confluent. Use at your own risk.
 
+## Requirements
+
+- **Confluent CLI** — required for cluster link and topic mirroring operations. [Download here](https://docs.confluent.io/confluent-cli/current/install.html)
+
 ## Tools
 
 | Tool | Description |
