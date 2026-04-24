@@ -22,6 +22,22 @@ def write_config(tmp_path, content=VALID_CONFIG):
 
 
 # ---------------------------------------------------------------------------
+# sn_bootstrap
+# ---------------------------------------------------------------------------
+
+def test_sn_bootstrap_4100():
+    from create_link import sn_bootstrap
+    result = sn_bootstrap("hermes1.service-now.com", 4100)
+    assert result == "hermes1.service-now.com:4100,hermes1.service-now.com:4101,hermes1.service-now.com:4102,hermes1.service-now.com:4103"
+
+
+def test_sn_bootstrap_4200():
+    from create_link import sn_bootstrap
+    result = sn_bootstrap("hermes1.service-now.com", 4200)
+    assert result == "hermes1.service-now.com:4200,hermes1.service-now.com:4201,hermes1.service-now.com:4202,hermes1.service-now.com:4203"
+
+
+# ---------------------------------------------------------------------------
 # load_config
 # ---------------------------------------------------------------------------
 
@@ -48,6 +64,34 @@ def test_load_config_exits_if_key_missing(tmp_path):
         [confluent]
         environment_id = env-abc123
         cluster_id     = lkc-abc123
+    """)
+    path = write_config(tmp_path, bad)
+    with pytest.raises(SystemExit) as exc:
+        load_config(path)
+    assert exc.value.code == 1
+
+
+def test_load_config_accepts_source_host(tmp_path):
+    from create_link import load_config
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id = env-abc123
+        cluster_id     = lkc-abc123
+        link_name      = test-link
+        source_host    = hermes1.service-now.com
+    """)
+    path = write_config(tmp_path, cfg_text)
+    cfg = load_config(path)
+    assert cfg["source_host"] == "hermes1.service-now.com"
+
+
+def test_load_config_exits_if_neither_source_key(tmp_path):
+    from create_link import load_config
+    bad = textwrap.dedent("""\
+        [confluent]
+        environment_id = env-abc123
+        cluster_id     = lkc-abc123
+        link_name      = test-link
     """)
     path = write_config(tmp_path, bad)
     with pytest.raises(SystemExit) as exc:
@@ -167,6 +211,18 @@ def test_build_ssl_properties_omits_key_password_when_not_set():
     from create_link import build_ssl_properties
     result = build_ssl_properties(b"CA", b"CERT", b"KEY")
     assert "ssl.key.password" not in result
+
+
+def test_build_ssl_properties_includes_topic_prefix():
+    from create_link import build_ssl_properties
+    assert "topic.prefix=4100." in build_ssl_properties(b"CA", b"CERT", b"KEY", topic_prefix="4100.")
+    assert "topic.prefix=4200." in build_ssl_properties(b"CA", b"CERT", b"KEY", topic_prefix="4200.")
+
+
+def test_build_ssl_properties_omits_topic_prefix_when_not_set():
+    from create_link import build_ssl_properties
+    result = build_ssl_properties(b"CA", b"CERT", b"KEY")
+    assert "topic.prefix" not in result
 
 
 # ---------------------------------------------------------------------------

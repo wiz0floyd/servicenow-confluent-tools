@@ -1,5 +1,32 @@
+# Single source cluster
 [confluent]
 environment_id   = env-xxxxxx
 cluster_id       = lkc-xxxxxx
 link_name        = my-cluster-link
 source_bootstrap = broker1.example.com:9093,broker2.example.com:9093
+
+# -----------------------------------------------------------------------
+# ServiceNow active-active dual-cluster configuration
+# -----------------------------------------------------------------------
+# ServiceNow runs an active-active Kafka deployment across two clusters:
+#   Cluster 1: <host>:4100-4103
+#   Cluster 2: <host>:4200-4203
+#
+# Both clusters are live at all times. ServiceNow publishes to both and
+# may fail over between them automatically based on health. To consume
+# reliably, Confluent must mirror BOTH simultaneously.
+#
+# This mode creates two cluster links and two sets of mirror topics.
+# Each set is prefixed with the source port so topics are unambiguous:
+#   4100.<topic>  — mirrored from the 4100 cluster
+#   4200.<topic>  — mirrored from the 4200 cluster
+#
+# Downstream consumers subscribe to both prefixed topics and deduplicate
+# by message key or offset. Do not treat one prefix as a failover — both
+# are always active and both must be consumed.
+#
+# [confluent]
+# environment_id = env-xxxxxx
+# cluster_id     = lkc-xxxxxx
+# link_name      = servicenow-link
+# source_host    = hermes1.service-now.com
