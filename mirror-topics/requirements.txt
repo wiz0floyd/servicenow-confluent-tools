@@ -1,0 +1,2 @@
+kafka-python>=2.0.0
+questionary>=2.0.0
