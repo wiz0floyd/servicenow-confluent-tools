@@ -274,25 +274,25 @@ def test_build_mirror_filters_returns_none_when_no_args():
 def test_build_mirror_filters_include_prefix():
     from mirror_topics import build_mirror_filters
     result = json.loads(build_mirror_filters(include_prefixes=["snc."]))
-    assert result == [{"filterType": "INCLUDE", "name": "snc.", "patternType": "PREFIXED"}]
+    assert result == {"topicFilters": [{"filterType": "INCLUDE", "name": "snc.", "patternType": "PREFIXED"}]}
 
 
 def test_build_mirror_filters_exclude_prefix():
     from mirror_topics import build_mirror_filters
     result = json.loads(build_mirror_filters(exclude_prefixes=["internal"]))
-    assert result == [{"filterType": "EXCLUDE", "name": "internal", "patternType": "PREFIXED"}]
+    assert result == {"topicFilters": [{"filterType": "EXCLUDE", "name": "internal", "patternType": "PREFIXED"}]}
 
 
 def test_build_mirror_filters_include_topic():
     from mirror_topics import build_mirror_filters
     result = json.loads(build_mirror_filters(include_topics=["my-topic"]))
-    assert result == [{"filterType": "INCLUDE", "name": "my-topic", "patternType": "LITERAL"}]
+    assert result == {"topicFilters": [{"filterType": "INCLUDE", "name": "my-topic", "patternType": "LITERAL"}]}
 
 
 def test_build_mirror_filters_exclude_topic():
     from mirror_topics import build_mirror_filters
     result = json.loads(build_mirror_filters(exclude_topics=["skip-me"]))
-    assert result == [{"filterType": "EXCLUDE", "name": "skip-me", "patternType": "LITERAL"}]
+    assert result == {"topicFilters": [{"filterType": "EXCLUDE", "name": "skip-me", "patternType": "LITERAL"}]}
 
 
 def test_build_mirror_filters_multiple_entries():
@@ -303,8 +303,9 @@ def test_build_mirror_filters_multiple_entries():
         include_topics=["exact-topic"],
         exclude_topics=["skip-this"],
     ))
-    assert len(result) == 4
-    types = {(e["filterType"], e["patternType"]) for e in result}
+    entries = result["topicFilters"]
+    assert len(entries) == 4
+    types = {(e["filterType"], e["patternType"]) for e in entries}
     assert ("INCLUDE", "PREFIXED") in types
     assert ("EXCLUDE", "PREFIXED") in types
     assert ("INCLUDE", "LITERAL") in types

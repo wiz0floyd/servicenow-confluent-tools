@@ -138,7 +138,7 @@ def build_mirror_filters(
         entries.append({"filterType": "INCLUDE", "name": name, "patternType": "LITERAL"})
     for name in (exclude_topics or []):
         entries.append({"filterType": "EXCLUDE", "name": name, "patternType": "LITERAL"})
-    return json.dumps(entries) if entries else None
+    return json.dumps({"topicFilters": entries}) if entries else None
 
 
 def enable_auto_mirror(
