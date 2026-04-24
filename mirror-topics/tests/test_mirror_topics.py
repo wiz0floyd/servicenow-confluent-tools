@@ -242,6 +242,73 @@ def test_enable_auto_mirror_exits_on_cli_failure(capsys):
     assert exc.value.code == 1
 
 
+def test_enable_auto_mirror_with_filters_includes_filter_config(capsys):
+    from mirror_topics import enable_auto_mirror
+    cfg = {
+        "link_name_4100": "servicenow-link-4100",
+        "link_name_4200": "servicenow-link-4200",
+        "environment_id": "env-abc123",
+        "cluster_id": "lkc-abc123",
+    }
+    with patch("subprocess.run") as mock_run:
+        enable_auto_mirror(cfg, dry_run=True, include_prefixes=["snc.hermes1"])
+        mock_run.assert_not_called()
+    out = capsys.readouterr().out
+    assert "auto.create.mirror.topics.filters" in out
+    assert "snc.hermes1" in out
+    assert "INCLUDE" in out
+    assert "PREFIXED" in out
+
+
+# ---------------------------------------------------------------------------
+# build_mirror_filters
+# ---------------------------------------------------------------------------
+
+def test_build_mirror_filters_returns_none_when_no_args():
+    from mirror_topics import build_mirror_filters
+    assert build_mirror_filters() is None
+
+
+def test_build_mirror_filters_include_prefix():
+    from mirror_topics import build_mirror_filters
+    result = json.loads(build_mirror_filters(include_prefixes=["snc."]))
+    assert result == [{"filterType": "INCLUDE", "name": "snc.", "patternType": "PREFIXED"}]
+
+
+def test_build_mirror_filters_exclude_prefix():
+    from mirror_topics import build_mirror_filters
+    result = json.loads(build_mirror_filters(exclude_prefixes=["internal"]))
+    assert result == [{"filterType": "EXCLUDE", "name": "internal", "patternType": "PREFIXED"}]
+
+
+def test_build_mirror_filters_include_topic():
+    from mirror_topics import build_mirror_filters
+    result = json.loads(build_mirror_filters(include_topics=["my-topic"]))
+    assert result == [{"filterType": "INCLUDE", "name": "my-topic", "patternType": "LITERAL"}]
+
+
+def test_build_mirror_filters_exclude_topic():
+    from mirror_topics import build_mirror_filters
+    result = json.loads(build_mirror_filters(exclude_topics=["skip-me"]))
+    assert result == [{"filterType": "EXCLUDE", "name": "skip-me", "patternType": "LITERAL"}]
+
+
+def test_build_mirror_filters_multiple_entries():
+    from mirror_topics import build_mirror_filters
+    result = json.loads(build_mirror_filters(
+        include_prefixes=["snc.hermes1"],
+        exclude_prefixes=["internal"],
+        include_topics=["exact-topic"],
+        exclude_topics=["skip-this"],
+    ))
+    assert len(result) == 4
+    types = {(e["filterType"], e["patternType"]) for e in result}
+    assert ("INCLUDE", "PREFIXED") in types
+    assert ("EXCLUDE", "PREFIXED") in types
+    assert ("INCLUDE", "LITERAL") in types
+    assert ("EXCLUDE", "LITERAL") in types
+
+
 # ---------------------------------------------------------------------------
 # create_mirror_topics
 # ---------------------------------------------------------------------------

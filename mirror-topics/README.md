@@ -18,6 +18,8 @@ pip install -r requirements.txt
 
 ```bash
 python mirror_topics.py [--config PATH] [--pem-dir PATH] [--filter PREFIX] [--all] [--dry-run]
+                        [--include-prefixes PREFIX ...] [--exclude-prefixes PREFIX ...]
+                        [--include-topics TOPIC ...] [--exclude-topics TOPIC ...]
 ```
 
 Default run — shows a checkbox list of topics filtered by `instance_name` from `link.conf`:
@@ -34,6 +36,10 @@ python mirror_topics.py --pem-dir /tmp/pems
 | `--pem-dir PATH` | `./` | Directory containing PEM files |
 | `--filter PREFIX` | `instance_name` from config | Pre-filter topics by prefix before showing the UI |
 | `--all` | off | Enable `auto.create.mirror.topics.enable=true` on both links and exit (skips UI) |
+| `--include-prefixes PREFIX ...` | none | (`--all` only) Auto-mirror topics matching these prefixes |
+| `--exclude-prefixes PREFIX ...` | none | (`--all` only) Skip topics matching these prefixes |
+| `--include-topics TOPIC ...` | none | (`--all` only) Auto-mirror these exact topic names |
+| `--exclude-topics TOPIC ...` | none | (`--all` only) Skip these exact topic names |
 | `--dry-run` | off | Print CLI commands without executing |
 
 ## link.conf keys used
