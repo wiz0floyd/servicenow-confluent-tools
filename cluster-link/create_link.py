@@ -130,7 +130,6 @@ def build_ssl_properties(
     client_key: bytes,
     literal_newlines: bool = False,
     key_password: str = None,
-    topic_prefix: str = None,
 ) -> str:
     """Return SSL properties block with inline PEM values."""
     inline = lambda b: _inline(b, literal_newlines)  # noqa: E731
@@ -144,8 +143,6 @@ def build_ssl_properties(
     ]
     if key_password:
         lines.append(f"ssl.key.password={key_password}")
-    if topic_prefix:
-        lines.append(f"topic.prefix={topic_prefix}")
     lines.append("")  # trailing newline
     return "\n".join(lines)
 
@@ -309,19 +306,19 @@ def main() -> None:
     # Downstream consumers subscribe to both and handle deduplication.
     if "source_host" in cfg:
         links = [
-            {**cfg, "link_name": f"{cfg['link_name']}-4100", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4100), "topic_prefix": "4100."},
-            {**cfg, "link_name": f"{cfg['link_name']}-4200", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4200), "topic_prefix": "4200."},
+            {**cfg, "link_name": f"{cfg['link_name']}-4100", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4100)},
+            {**cfg, "link_name": f"{cfg['link_name']}-4200", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4200)},
         ]
     else:
-        links = [{**cfg, "topic_prefix": cfg.get("topic_prefix") or None}]
+        links = [cfg]
+
+    props = build_ssl_properties(
+        ca_pem, client_cert, client_key,
+        literal_newlines=args.literal_newlines,
+        key_password=args.key_password,
+    )
 
     for link_cfg in links:
-        props = build_ssl_properties(
-            ca_pem, client_cert, client_key,
-            literal_newlines=args.literal_newlines,
-            key_password=args.key_password,
-            topic_prefix=link_cfg["topic_prefix"],
-        )
         tmp = tempfile.NamedTemporaryFile(
             mode="w", suffix=".properties", delete=False, encoding="utf-8"
         )

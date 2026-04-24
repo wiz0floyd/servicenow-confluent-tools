@@ -213,16 +213,6 @@ def test_build_ssl_properties_omits_key_password_when_not_set():
     assert "ssl.key.password" not in result
 
 
-def test_build_ssl_properties_includes_topic_prefix():
-    from create_link import build_ssl_properties
-    assert "topic.prefix=4100." in build_ssl_properties(b"CA", b"CERT", b"KEY", topic_prefix="4100.")
-    assert "topic.prefix=4200." in build_ssl_properties(b"CA", b"CERT", b"KEY", topic_prefix="4200.")
-
-
-def test_build_ssl_properties_omits_topic_prefix_when_not_set():
-    from create_link import build_ssl_properties
-    result = build_ssl_properties(b"CA", b"CERT", b"KEY")
-    assert "topic.prefix" not in result
 
 
 # ---------------------------------------------------------------------------

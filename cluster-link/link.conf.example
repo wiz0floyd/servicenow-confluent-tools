@@ -17,13 +17,9 @@ source_bootstrap = broker1.example.com:9093,broker2.example.com:9093
 # reliably, Confluent must mirror BOTH simultaneously.
 #
 # This mode creates two cluster links and two sets of mirror topics.
-# Each set is prefixed with the source port so topics are unambiguous:
-#   4100.<topic>  — mirrored from the 4100 cluster
-#   4200.<topic>  — mirrored from the 4200 cluster
-#
-# Downstream consumers subscribe to both prefixed topics and deduplicate
-# by message key or offset. Do not treat one prefix as a failover — both
-# are always active and both must be consumed.
+# Both links are always active and both must be consumed. Mirror topic
+# naming (e.g. adding a source-cluster prefix) is handled separately
+# when creating mirror topics via the mirror management script.
 #
 # [confluent]
 # environment_id = env-xxxxxx
