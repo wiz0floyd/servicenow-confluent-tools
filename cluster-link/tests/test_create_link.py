@@ -27,14 +27,14 @@ def write_config(tmp_path, content=VALID_CONFIG):
 
 def test_sn_bootstrap_4100():
     from create_link import sn_bootstrap
-    result = sn_bootstrap("hermes1.service-now.com", 4100)
-    assert result == "hermes1.service-now.com:4100,hermes1.service-now.com:4101,hermes1.service-now.com:4102,hermes1.service-now.com:4103"
+    result = sn_bootstrap("kafka.example.com", 4100)
+    assert result == "kafka.example.com:4100,kafka.example.com:4101,kafka.example.com:4102,kafka.example.com:4103"
 
 
 def test_sn_bootstrap_4200():
     from create_link import sn_bootstrap
-    result = sn_bootstrap("hermes1.service-now.com", 4200)
-    assert result == "hermes1.service-now.com:4200,hermes1.service-now.com:4201,hermes1.service-now.com:4202,hermes1.service-now.com:4203"
+    result = sn_bootstrap("kafka.example.com", 4200)
+    assert result == "kafka.example.com:4200,kafka.example.com:4201,kafka.example.com:4202,kafka.example.com:4203"
 
 
 # ---------------------------------------------------------------------------
@@ -78,11 +78,11 @@ def test_load_config_accepts_source_host(tmp_path):
         environment_id = env-abc123
         cluster_id     = lkc-abc123
         link_name      = test-link
-        source_host    = hermes1.service-now.com
+        source_host    = kafka.example.com
     """)
     path = write_config(tmp_path, cfg_text)
     cfg = load_config(path)
-    assert cfg["source_host"] == "hermes1.service-now.com"
+    assert cfg["source_host"] == "kafka.example.com"
 
 
 def test_load_config_exits_if_neither_source_key(tmp_path):
