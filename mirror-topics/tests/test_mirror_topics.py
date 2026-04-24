@@ -34,6 +34,45 @@ def test_load_config_returns_dict_with_link_names(tmp_path):
     assert cfg["link_name_4200"] == "servicenow-link-4200"
 
 
+def test_load_config_defaults_source_clusters_and_brokers(tmp_path):
+    from mirror_topics import load_config, SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
+    cfg = load_config(write_config(tmp_path))
+    assert cfg["source_clusters"] == SN_SOURCE_CLUSTERS
+    assert cfg["brokers_per_cluster"] == SN_BROKERS_PER_CLUSTER
+
+
+def test_load_config_reads_custom_source_clusters(tmp_path):
+    from mirror_topics import load_config
+    custom = textwrap.dedent("""\
+        [confluent]
+        environment_id  = env-abc123
+        cluster_id      = lkc-abc123
+        link_name       = servicenow-link
+        source_host     = kafka.example.com
+        instance_name   = snc.myinstance
+        source_clusters = 5000, 5100
+    """)
+    cfg = load_config(write_config(tmp_path, custom))
+    assert cfg["source_clusters"] == [5000, 5100]
+    assert cfg["link_name_5000"] == "servicenow-link-5000"
+    assert cfg["link_name_5100"] == "servicenow-link-5100"
+
+
+def test_load_config_reads_custom_brokers_per_cluster(tmp_path):
+    from mirror_topics import load_config
+    custom = textwrap.dedent("""\
+        [confluent]
+        environment_id      = env-abc123
+        cluster_id          = lkc-abc123
+        link_name           = servicenow-link
+        source_host         = kafka.example.com
+        instance_name       = snc.myinstance
+        brokers_per_cluster = 2
+    """)
+    cfg = load_config(write_config(tmp_path, custom))
+    assert cfg["brokers_per_cluster"] == 2
+
+
 def test_load_config_exits_if_missing():
     from mirror_topics import load_config
     with pytest.raises(SystemExit) as exc:

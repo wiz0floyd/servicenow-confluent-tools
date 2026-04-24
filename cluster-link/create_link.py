@@ -21,14 +21,15 @@ import time
 
 REQUIRED_KEYS = ("environment_id", "cluster_id", "link_name")
 
-# ServiceNow active-active: base port for each source cluster, 4 brokers each
+# ServiceNow active-active: base port for each source cluster, 4 brokers each.
+# These are the defaults; both can be overridden in link.conf.
 SN_SOURCE_CLUSTERS = [4100, 4200]
 SN_BROKERS_PER_CLUSTER = 4
 
 
-def sn_bootstrap(host: str, base_port: int) -> str:
+def sn_bootstrap(host: str, base_port: int, brokers_per_cluster: int = SN_BROKERS_PER_CLUSTER) -> str:
     """Build a bootstrap string for one ServiceNow source cluster."""
-    return ",".join(f"{host}:{base_port + i}" for i in range(SN_BROKERS_PER_CLUSTER))
+    return ",".join(f"{host}:{base_port + i}" for i in range(brokers_per_cluster))
 
 CONFLUENT_INSTALL = """\
 Confluent CLI not found. Install it:
@@ -63,7 +64,16 @@ def load_config(path: str) -> dict:
             file=sys.stderr,
         )
         sys.exit(1)
-    return dict(section)
+    result = dict(section)
+    clusters_raw = result.get("source_clusters", "")
+    result["source_clusters"] = (
+        [int(x.strip()) for x in clusters_raw.split(",") if x.strip()]
+        if clusters_raw
+        else list(SN_SOURCE_CLUSTERS)
+    )
+    bpc_raw = result.get("brokers_per_cluster", "")
+    result["brokers_per_cluster"] = int(bpc_raw) if bpc_raw else SN_BROKERS_PER_CLUSTER
+    return result
 
 
 def check_confluent_cli() -> None:
@@ -311,14 +321,18 @@ def main() -> None:
     # Downstream consumers subscribe to both and handle deduplication.
     if "source_host" in cfg:
         links = [
-            {**cfg, "link_name": f"{cfg['link_name']}-4100", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4100)},
-            {**cfg, "link_name": f"{cfg['link_name']}-4200", "source_bootstrap": sn_bootstrap(cfg["source_host"], 4200)},
+            {
+                **cfg,
+                "link_name": f"{cfg['link_name']}-{port}",
+                "source_bootstrap": sn_bootstrap(cfg["source_host"], port, cfg["brokers_per_cluster"]),
+            }
+            for port in cfg["source_clusters"]
         ]
     else:
         links = [cfg]
 
     for link_cfg in links:
-        port = 4100 if link_cfg["link_name"].endswith("-4100") else 4200
+        port = int(link_cfg["link_name"].rsplit("-", 1)[1])
         props = build_ssl_properties(
             ca_pem, client_cert, client_key,
             literal_newlines=args.literal_newlines,

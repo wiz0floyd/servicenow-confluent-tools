@@ -24,6 +24,21 @@ link_name        = my-cluster-link
 source_bootstrap = broker1.example.com:9093,broker2.example.com:9093
 ```
 
+For ServiceNow active-active mode (dual-cluster), use `source_host` instead of `source_bootstrap`. The tool creates one link per cluster in `source_clusters` and polls each to `ACTIVE`:
+
+```ini
+[confluent]
+environment_id      = env-xxxxxx
+cluster_id          = lkc-xxxxxx
+link_name           = servicenow-link
+source_host         = hermes1.service-now.com
+instance_name       = snc.yourinstance
+
+# Optional — defaults shown:
+# source_clusters     = 4100, 4200
+# brokers_per_cluster = 4
+```
+
 `link.conf` is gitignored — your live IDs stay local.
 
 ## Usage

@@ -22,8 +22,12 @@ source_bootstrap = broker1.example.com:9093,broker2.example.com:9093
 # when creating mirror topics via the mirror management script.
 #
 # [confluent]
-# environment_id = env-xxxxxx
-# cluster_id     = lkc-xxxxxx
-# link_name      = servicenow-link
-# source_host    = hermes1.service-now.com
-# instance_name  = snc.yourinstance   # topic prefix filter for mirror-topics tool
+# environment_id      = env-xxxxxx
+# cluster_id          = lkc-xxxxxx
+# link_name           = servicenow-link
+# source_host         = kafka.example.com
+# instance_name       = snc.yourinstance   # topic prefix filter for mirror-topics tool
+#
+# Optional overrides (defaults shown):
+# source_clusters     = 4100, 4200   # comma-separated base ports, one link per cluster
+# brokers_per_cluster = 4            # brokers per cluster (ports base, base+1, ...)

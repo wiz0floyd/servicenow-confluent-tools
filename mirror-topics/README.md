@@ -1,6 +1,6 @@
 # mirror-topics
 
-Mirrors ServiceNow Kafka topics to Confluent Cloud across both DC cluster links (`-4100` and `-4200`). Presents a checkbox UI to select topics, skips already-mirrored ones, and optionally enables auto-mirror for all future topics.
+Mirrors ServiceNow Kafka topics to Confluent Cloud across all source cluster links. Presents a checkbox UI to select topics, skips already-mirrored ones, and optionally enables auto-mirror for all future topics.
 
 ## Prerequisites
 
@@ -42,9 +42,13 @@ python mirror_topics.py --pem-dir /tmp/pems
 [confluent]
 environment_id = env-xxxxxx
 cluster_id     = lkc-xxxxxx
-link_name      = my-cluster-link     # tool appends -4100 and -4200
-source_host    = broker.example.com  # brokers at ports 4100–4103 and 4200–4203
-instance_name  = myinstance          # default topic filter prefix
+link_name      = my-cluster-link       # tool appends -<port> per source cluster
+source_host    = kafka.example.com     # brokers addressed as <host>:<port+n>
+instance_name  = myinstance            # default topic filter prefix
+
+# Optional — defaults shown:
+# source_clusters     = 4100, 4200     # one link created per cluster
+# brokers_per_cluster = 4
 ```
 
 `link.conf` is gitignored — your live IDs stay local.

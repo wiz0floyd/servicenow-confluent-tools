@@ -37,6 +37,12 @@ def test_sn_bootstrap_4200():
     assert result == "kafka.example.com:4200,kafka.example.com:4201,kafka.example.com:4202,kafka.example.com:4203"
 
 
+def test_sn_bootstrap_custom_brokers_per_cluster():
+    from create_link import sn_bootstrap
+    result = sn_bootstrap("kafka.example.com", 5000, brokers_per_cluster=2)
+    assert result == "kafka.example.com:5000,kafka.example.com:5001"
+
+
 # ---------------------------------------------------------------------------
 # load_config
 # ---------------------------------------------------------------------------
@@ -83,6 +89,44 @@ def test_load_config_accepts_source_host(tmp_path):
     path = write_config(tmp_path, cfg_text)
     cfg = load_config(path)
     assert cfg["source_host"] == "kafka.example.com"
+
+
+def test_load_config_defaults_source_clusters_and_brokers(tmp_path):
+    from create_link import load_config, SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
+    path = write_config(tmp_path)
+    cfg = load_config(path)
+    assert cfg["source_clusters"] == SN_SOURCE_CLUSTERS
+    assert cfg["brokers_per_cluster"] == SN_BROKERS_PER_CLUSTER
+
+
+def test_load_config_reads_custom_source_clusters(tmp_path):
+    from create_link import load_config
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id   = env-abc123
+        cluster_id       = lkc-abc123
+        link_name        = test-link
+        source_bootstrap = broker.example.com:9093
+        source_clusters  = 5000, 5100
+    """)
+    path = write_config(tmp_path, cfg_text)
+    cfg = load_config(path)
+    assert cfg["source_clusters"] == [5000, 5100]
+
+
+def test_load_config_reads_custom_brokers_per_cluster(tmp_path):
+    from create_link import load_config
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id      = env-abc123
+        cluster_id          = lkc-abc123
+        link_name           = test-link
+        source_bootstrap    = broker.example.com:9093
+        brokers_per_cluster = 2
+    """)
+    path = write_config(tmp_path, cfg_text)
+    cfg = load_config(path)
+    assert cfg["brokers_per_cluster"] == 2
 
 
 def test_load_config_exits_if_neither_source_key(tmp_path):
