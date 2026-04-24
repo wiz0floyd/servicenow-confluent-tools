@@ -14,6 +14,8 @@ import sys
 from kafka import KafkaConsumer
 
 INTERNAL_TOPIC_PREFIXES = ("__", "_confluent")
+# Defaults; both can be overridden in link.conf.
+SN_SOURCE_CLUSTERS = [4100, 4200]
 SN_BROKERS_PER_CLUSTER = 4
 
 CONFLUENT_INSTALL = """\
@@ -42,8 +44,17 @@ def load_config(path: str) -> dict:
             print(f"Error: Missing key in link.conf: {key}", file=sys.stderr)
             sys.exit(1)
     result = dict(section)
-    result["link_name_4100"] = f"{result['link_name']}-4100"
-    result["link_name_4200"] = f"{result['link_name']}-4200"
+    clusters_raw = result.get("source_clusters", "")
+    source_clusters = (
+        [int(x.strip()) for x in clusters_raw.split(",") if x.strip()]
+        if clusters_raw
+        else list(SN_SOURCE_CLUSTERS)
+    )
+    bpc_raw = result.get("brokers_per_cluster", "")
+    result["source_clusters"] = source_clusters
+    result["brokers_per_cluster"] = int(bpc_raw) if bpc_raw else SN_BROKERS_PER_CLUSTER
+    for port in source_clusters:
+        result[f"link_name_{port}"] = f"{result['link_name']}-{port}"
     return result
 
 
@@ -54,8 +65,9 @@ def list_source_topics(
     cert_path: str,
     key_path: str,
     filter_prefix: str = None,
+    brokers_per_cluster: int = SN_BROKERS_PER_CLUSTER,
 ) -> list:
-    bootstrap = ",".join(f"{host}:{base_port + i}" for i in range(SN_BROKERS_PER_CLUSTER))
+    bootstrap = ",".join(f"{host}:{base_port + i}" for i in range(brokers_per_cluster))
     try:
         consumer = KafkaConsumer(
             bootstrap_servers=bootstrap,
@@ -81,7 +93,9 @@ def list_source_topics(
 
 def get_mirrored_source_topics(cfg: dict) -> set:
     source_names = set()
-    for link_key, prefix in [("link_name_4100", "4100."), ("link_name_4200", "4200.")]:
+    for port in cfg.get("source_clusters", SN_SOURCE_CLUSTERS):
+        link_key = f"link_name_{port}"
+        prefix = f"{port}."
         result = subprocess.run(
             [
                 "confluent", "kafka", "mirror", "list",
@@ -107,8 +121,8 @@ def get_mirrored_source_topics(cfg: dict) -> set:
 
 
 def enable_auto_mirror(cfg: dict, dry_run: bool) -> None:
-    for link_key in ("link_name_4100", "link_name_4200"):
-        link = cfg[link_key]
+    for port in cfg.get("source_clusters", SN_SOURCE_CLUSTERS):
+        link = cfg[f"link_name_{port}"]
         cmd = [
             "confluent", "kafka", "link", "configuration", "update", link,
             "--environment", cfg["environment_id"],
@@ -128,8 +142,9 @@ def enable_auto_mirror(cfg: dict, dry_run: bool) -> None:
 
 def create_mirror_topics(cfg: dict, topics: list, dry_run: bool) -> list:
     failures = []
-    for link_key, prefix in [("link_name_4100", "4100."), ("link_name_4200", "4200.")]:
-        link = cfg[link_key]
+    for port in cfg.get("source_clusters", SN_SOURCE_CLUSTERS):
+        link = cfg[f"link_name_{port}"]
+        prefix = f"{port}."
         for topic in topics:
             dest = f"{prefix}{topic}"
             cmd = [
@@ -213,7 +228,8 @@ def main() -> None:
 
     effective_filter = args.filter or cfg["instance_name"]
     topics = list_source_topics(
-        cfg["source_host"], 4100, ca, cert, key, filter_prefix=effective_filter
+        cfg["source_host"], cfg["source_clusters"][0], ca, cert, key,
+        filter_prefix=effective_filter, brokers_per_cluster=cfg["brokers_per_cluster"],
     )
 
     if not topics:
@@ -237,11 +253,11 @@ def main() -> None:
         print("No topics selected.")
         return
 
-    print(f"\nWill create {len(selected)} mirror topic(s) on "
-          f"{cfg['link_name_4100']} and {cfg['link_name_4200']}:")
+    link_names = " and ".join(cfg[f"link_name_{port}"] for port in cfg["source_clusters"])
+    print(f"\nWill create {len(selected)} mirror topic(s) on {link_names}:")
     for t in selected:
-        print(f"  4100.{t}  →  {cfg['link_name_4100']}")
-        print(f"  4200.{t}  →  {cfg['link_name_4200']}")
+        for port in cfg["source_clusters"]:
+            print(f"  {port}.{t}  →  {cfg[f'link_name_{port}']}")
 
     if not questionary.confirm("\nProceed?", default=False).ask():
         print("Aborted.")
@@ -255,7 +271,7 @@ def main() -> None:
             print(f"  {f}")
         sys.exit(1)
     elif not args.dry_run:
-        print(f"\nDone. {len(selected) * 2} mirror topic(s) created.")
+        print(f"\nDone. {len(selected) * len(cfg['source_clusters'])} mirror topic(s) created.")
 
 
 if __name__ == "__main__":
