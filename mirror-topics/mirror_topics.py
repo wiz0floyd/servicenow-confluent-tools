@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 from kafka import KafkaConsumer
 
@@ -149,26 +150,38 @@ def enable_auto_mirror(
     exclude_topics: list = None,
 ) -> None:
     filters_json = build_mirror_filters(include_prefixes, exclude_prefixes, include_topics, exclude_topics)
+    lines = ["auto.create.mirror.topics.enable=true"]
+    if filters_json:
+        lines.append(f"auto.create.mirror.topics.filters={filters_json}")
+
     for port in cfg.get("source_clusters", SN_SOURCE_CLUSTERS):
         link = cfg[f"link_name_{port}"]
-        configs = ["auto.create.mirror.topics.enable=true"]
-        if filters_json:
-            configs.append(f"auto.create.mirror.topics.filters={filters_json}")
-        cmd = [
-            "confluent", "kafka", "link", "configuration", "update", link,
-            "--environment", cfg["environment_id"],
-            "--cluster", cfg["cluster_id"],
-            "--config", ",".join(configs),
-        ]
-        if dry_run:
-            print("Dry run — would execute:")
-            print("  " + " ".join(cmd))
-            continue
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            sys.exit(1)
-        print(f"Auto-mirror enabled on {link}.")
+        # Write config to a temp file — the CLI's --config CSV parser can't handle
+        # JSON values with embedded quotes when passed inline.
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".properties", delete=False) as f:
+            f.write("\n".join(lines))
+            config_path = f.name
+        try:
+            cmd = [
+                "confluent", "kafka", "link", "configuration", "update", link,
+                "--environment", cfg["environment_id"],
+                "--cluster", cfg["cluster_id"],
+                "--config", config_path,
+            ]
+            if dry_run:
+                print("Dry run — would execute:")
+                print("  " + " ".join(cmd))
+                print("  Config file contents:")
+                for line in lines:
+                    print(f"    {line}")
+                continue
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(result.stderr, file=sys.stderr)
+                sys.exit(1)
+            print(f"Auto-mirror enabled on {link}.")
+        finally:
+            os.unlink(config_path)
 
 
 def create_mirror_topics(cfg: dict, topics: list, dry_run: bool) -> list:

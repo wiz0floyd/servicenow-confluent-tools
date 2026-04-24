@@ -208,6 +208,7 @@ def test_enable_auto_mirror_dry_run_prints_commands(capsys):
     out = capsys.readouterr().out
     assert "servicenow-link-4100" in out
     assert "servicenow-link-4200" in out
+    # config is written to a temp file; the key appears in the printed file contents
     assert "auto.create.mirror.topics.enable=true" in out
 
 
@@ -253,6 +254,7 @@ def test_enable_auto_mirror_with_filters_includes_filter_config(capsys):
     with patch("subprocess.run") as mock_run:
         enable_auto_mirror(cfg, dry_run=True, include_prefixes=["snc.hermes1"])
         mock_run.assert_not_called()
+    # filter key/value appear in the printed config file contents block
     out = capsys.readouterr().out
     assert "auto.create.mirror.topics.filters" in out
     assert "snc.hermes1" in out
