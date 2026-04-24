@@ -11,7 +11,7 @@ VALID_CONFIG = textwrap.dedent("""\
     environment_id = env-abc123
     cluster_id     = lkc-abc123
     link_name      = servicenow-link
-    source_host    = hermes1.service-now.com
+    source_host    = kafka.example.com
     instance_name  = snc.myinstance
 """)
 
@@ -62,7 +62,7 @@ def test_load_config_exits_if_no_instance_name(tmp_path):
         environment_id = env-abc123
         cluster_id     = lkc-abc123
         link_name      = servicenow-link
-        source_host    = hermes1.service-now.com
+        source_host    = kafka.example.com
     """)
     with pytest.raises(SystemExit) as exc:
         load_config(write_config(tmp_path, bad))
@@ -84,7 +84,7 @@ def test_list_source_topics_returns_sorted_list():
     mock_consumer = MagicMock()
     mock_consumer.topics.return_value = {"zebra", "alpha", "__consumer_offsets"}
     with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
-        topics = list_source_topics("hermes1.service-now.com", 4100, "ca", "cert", "key")
+        topics = list_source_topics("kafka.example.com", 4100, "ca", "cert", "key")
     assert topics == ["alpha", "zebra"]
     assert "__consumer_offsets" not in topics
 
@@ -95,7 +95,7 @@ def test_list_source_topics_applies_filter():
     mock_consumer.topics.return_value = {"sn_foo", "sn_bar", "other"}
     with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
         topics = list_source_topics(
-            "hermes1.service-now.com", 4100, "ca", "cert", "key", filter_prefix="sn_"
+            "kafka.example.com", 4100, "ca", "cert", "key", filter_prefix="sn_"
         )
     assert topics == ["sn_bar", "sn_foo"]
     assert "other" not in topics
@@ -107,7 +107,7 @@ def test_list_source_topics_exits_on_connection_error(capsys):
     mock_consumer.topics.side_effect = Exception("Connection refused")
     with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
         with pytest.raises(SystemExit) as exc:
-            list_source_topics("hermes1.service-now.com", 4100, "ca", "cert", "key")
+            list_source_topics("kafka.example.com", 4100, "ca", "cert", "key")
     assert exc.value.code == 1
     assert "Connection refused" in capsys.readouterr().err
 
