@@ -8,6 +8,7 @@ A collection of CLI tools for integrating ServiceNow's Kafka infrastructure with
 |---|---|
 | [`extract-pem/`](extract-pem/) | Extract `ca.pem`, `client-cert.pem`, and `client-key.pem` from Java KeyStore / TrustStore files |
 | [`cluster-link/`](cluster-link/) | Create a Confluent Cloud Cluster Link from a source Kafka cluster using mTLS |
+| [`mirror-topics/`](mirror-topics/) | Mirror ServiceNow Kafka topics to Confluent Cloud across both DC cluster links with a checkbox UI |
 
 ## Typical workflow
 
