@@ -319,12 +319,14 @@ def main() -> None:
     #   4100.<topic>  — mirrored from the 4100 source cluster
     #   4200.<topic>  — mirrored from the 4200 source cluster
     # Downstream consumers subscribe to both and handle deduplication.
-    if "source_host" in cfg:
+    dual_cluster = "source_host" in cfg
+    if dual_cluster:
         links = [
             {
                 **cfg,
                 "link_name": f"{cfg['link_name']}-{port}",
                 "source_bootstrap": sn_bootstrap(cfg["source_host"], port, cfg["brokers_per_cluster"]),
+                "_port": port,
             }
             for port in cfg["source_clusters"]
         ]
@@ -332,12 +334,12 @@ def main() -> None:
         links = [cfg]
 
     for link_cfg in links:
-        port = int(link_cfg["link_name"].rsplit("-", 1)[1])
-        props = build_ssl_properties(
+        ssl_props = build_ssl_properties(
             ca_pem, client_cert, client_key,
             literal_newlines=args.literal_newlines,
             key_password=args.key_password,
-        ) + build_link_properties(port)
+        )
+        props = ssl_props + build_link_properties(link_cfg["_port"]) if dual_cluster else ssl_props
 
         tmp = tempfile.NamedTemporaryFile(
             mode="w", suffix=".properties", delete=False, encoding="utf-8"

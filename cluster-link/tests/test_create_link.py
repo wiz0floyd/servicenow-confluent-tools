@@ -432,3 +432,69 @@ def test_dual_link_properties_include_4200_prefix():
     from create_link import build_link_properties
     props = build_link_properties(4200)
     assert "cluster.link.prefix=4200." in props
+
+
+# ---------------------------------------------------------------------------
+# single-cluster vs dual-cluster link expansion (regression for issue #14)
+# ---------------------------------------------------------------------------
+
+def test_single_cluster_mode_does_not_crash_or_add_prefix(tmp_path, capsys):
+    """source_bootstrap mode must not try to extract a port from link_name."""
+    from create_link import main
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id   = env-abc123
+        cluster_id       = lkc-abc123
+        link_name        = my-link
+        source_bootstrap = broker.example.com:9093
+    """)
+    (tmp_path / "link.conf").write_text(cfg_text)
+    (tmp_path / "ca.pem").write_bytes(b"CA")
+    (tmp_path / "client-cert.pem").write_bytes(b"CERT")
+    (tmp_path / "client-key.pem").write_bytes(b"KEY")
+
+    mock_run = MagicMock(returncode=0, stdout="", stderr="")
+    with patch("sys.argv", [
+        "create_link.py",
+        "--config", str(tmp_path / "link.conf"),
+        "--pem-dir", str(tmp_path),
+        "--dry-run",
+    ]):
+        with patch("create_link.check_confluent_cli"):
+            with patch("create_link.check_auth"):
+                with patch("subprocess.run", return_value=mock_run):
+                    main()  # must not raise ValueError / IndexError
+
+    out = capsys.readouterr().out
+    assert "cluster.link.prefix" not in out
+
+
+def test_dual_cluster_mode_adds_port_prefix(tmp_path, capsys):
+    """source_host mode must add cluster.link.prefix for each port."""
+    from create_link import main
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id = env-abc123
+        cluster_id     = lkc-abc123
+        link_name      = my-link
+        source_host    = kafka.example.com
+        source_clusters = 4100, 4200
+    """)
+    (tmp_path / "link.conf").write_text(cfg_text)
+    (tmp_path / "ca.pem").write_bytes(b"CA")
+    (tmp_path / "client-cert.pem").write_bytes(b"CERT")
+    (tmp_path / "client-key.pem").write_bytes(b"KEY")
+
+    with patch("sys.argv", [
+        "create_link.py",
+        "--config", str(tmp_path / "link.conf"),
+        "--pem-dir", str(tmp_path),
+        "--dry-run",
+    ]):
+        with patch("create_link.check_confluent_cli"):
+            with patch("create_link.check_auth"):
+                main()  # must not raise
+
+    out = capsys.readouterr().out
+    assert "4100" in out
+    assert "4200" in out
