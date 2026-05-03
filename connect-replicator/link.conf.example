@@ -1,0 +1,33 @@
+# Connect Replicator configuration for ServiceNow Hermes <-> Confluent Cloud
+# Copy to link.conf and fill in your values. link.conf is gitignored.
+
+[confluent]
+# Required (both directions)
+environment_id      = env-xxxxxx
+cluster_id          = lkc-xxxxxx
+connector_name      = sn-replicator
+source_host         = hermes.servicenow.com
+pem_dir             = ../extract-pem
+
+# Optional: direction defaults to cc-to-sn
+# direction           = cc-to-sn        # or sn-to-cc
+
+# Optional: comma-separated topics; leave blank to use the wizard or pass --all
+# topics              = your-topic-1, your-topic-2
+
+# Optional: consumer group ID (default: {connector_name}-group)
+# group_id            = sn-replicator-group
+
+# Optional: destination topic rename pattern (default: keep same name)
+# topic_rename_format = ${topic}
+
+# Optional: Connect worker REST endpoint (default: http://localhost:8083)
+# connect_url         = http://localhost:8083
+
+# cc-to-sn: SN inbound load balancer port (default: 4000)
+# inbound_port        = 4000
+# brokers_per_cluster = 4
+
+# sn-to-cc: direct access to both active-active clusters (default: 4100, 4200)
+# source_clusters     = 4100, 4200
+# brokers_per_cluster = 4
