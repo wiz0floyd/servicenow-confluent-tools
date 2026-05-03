@@ -148,6 +148,16 @@ def test_list_source_topics_exits_on_connection_error(capsys):
     assert "Connection refused" in capsys.readouterr().err
 
 
+def test_list_source_topics_closes_consumer_on_topics_error():
+    from mirror_topics import list_source_topics
+    mock_consumer = MagicMock()
+    mock_consumer.topics.side_effect = Exception("Connection refused")
+    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
+        with pytest.raises(SystemExit):
+            list_source_topics("kafka.example.com", 4100, "ca", "cert", "key")
+    mock_consumer.close.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # get_mirrored_source_topics
 # ---------------------------------------------------------------------------

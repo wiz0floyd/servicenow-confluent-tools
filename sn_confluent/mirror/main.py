@@ -58,8 +58,10 @@ def list_source_topics(
             ssl_certfile=cert_path,
             ssl_keyfile=key_path,
         )
-        raw_topics = consumer.topics()
-        consumer.close()
+        try:
+            raw_topics = consumer.topics()
+        finally:
+            consumer.close()
     except Exception as exc:
         print(f"Error: Failed to connect to source brokers: {exc}", file=sys.stderr)
         sys.exit(1)
