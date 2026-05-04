@@ -269,6 +269,10 @@ def main() -> None:
                         help="Print commands without executing")
     args = parser.parse_args()
 
+    filter_args = [args.include_prefixes, args.exclude_prefixes, args.include_topics, args.exclude_topics]
+    if any(filter_args) and not args.all:
+        parser.error("--include-prefixes, --exclude-prefixes, --include-topics, and --exclude-topics require --all")
+
     cfg = load_config(args.config)
     check_confluent_cli()
     check_auth(cfg["environment_id"], cfg["cluster_id"])

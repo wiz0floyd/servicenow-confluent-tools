@@ -262,6 +262,32 @@ def test_enable_auto_mirror_with_filters_includes_filter_config(capsys):
     assert "PREFIXED" in out
 
 
+def test_enable_auto_mirror_with_filters_live_run_passes_config_file_and_cleans_up():
+    import os
+    from mirror_topics import enable_auto_mirror
+    cfg = {
+        "link_name_4100": "servicenow-link-4100",
+        "link_name_4200": "servicenow-link-4200",
+        "environment_id": "env-abc123",
+        "cluster_id": "lkc-abc123",
+    }
+    config_paths = []
+
+    def capture_config_path(cmd, **kwargs):
+        config_idx = cmd.index("--config") + 1
+        config_paths.append(cmd[config_idx])
+        return MagicMock(returncode=0, stdout="Updated.")
+
+    with patch("subprocess.run", side_effect=capture_config_path):
+        enable_auto_mirror(cfg, dry_run=False, include_prefixes=["snc.hermes1"])
+
+    assert len(config_paths) == 2
+    for path in config_paths:
+        assert path.endswith(".properties")
+        # temp file must be deleted after the call
+        assert not os.path.exists(path)
+
+
 # ---------------------------------------------------------------------------
 # build_mirror_filters
 # ---------------------------------------------------------------------------
