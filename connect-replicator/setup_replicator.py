@@ -9,27 +9,21 @@ import configparser
 import getpass
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 
-# Defaults; both can be overridden in link.conf.
-SN_SOURCE_CLUSTERS = [4100, 4200]
-SN_BROKERS_PER_CLUSTER = 4
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+from shared.pem_common import (
+    SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER, CONFLUENT_INSTALL,
+    check_confluent_cli, load_pem_files,
+)
+
 SN_INBOUND_PORT = 4000
-
-CONFLUENT_INSTALL = """\
-Confluent CLI not found. Install it:
-
-  Windows : winget install Confluent.ConfluentCLI
-  macOS   : brew install confluentinc/tap/confluent-cli
-  Linux   : See https://docs.confluent.io/confluent-cli/current/install.html
-
-Then authenticate: confluent login
-"""
 
 OVERRIDE_POLICY_WARNING = """\
 Note: cc-to-sn uses producer.override.* to write to SN Hermes.
@@ -66,28 +60,6 @@ def load_config(path: str) -> dict:
     bpc_raw = result.get("brokers_per_cluster", "")
     result["brokers_per_cluster"] = int(bpc_raw) if bpc_raw else SN_BROKERS_PER_CLUSTER
     return result
-
-
-def check_confluent_cli() -> None:
-    if shutil.which("confluent") is None:
-        print(CONFLUENT_INSTALL)
-        sys.exit(1)
-
-
-def load_pem_files(pem_dir: str) -> tuple:
-    """Return (ca_bytes, cert_bytes, key_bytes). Exits 1 if any file is missing."""
-    files = {"ca.pem": None, "client-cert.pem": None, "client-key.pem": None}
-    for name in files:
-        path = os.path.join(pem_dir, name)
-        if not os.path.exists(path):
-            print(
-                f"Error: {name} not found in {pem_dir}. Run: python extract_pem.py first",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        with open(path, "rb") as fh:
-            files[name] = fh.read()
-    return files["ca.pem"], files["client-cert.pem"], files["client-key.pem"]
 
 
 def resolve_key_password(client_key_bytes: bytes, cli_password: str | None) -> str | None:
