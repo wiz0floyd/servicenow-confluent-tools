@@ -149,13 +149,36 @@ def test_list_source_topics_exits_on_connection_error(capsys):
 
 
 def test_list_source_topics_closes_consumer_on_topics_error():
-    from mirror_topics import list_source_topics
+    from sn_confluent.mirror.main import list_source_topics
     mock_consumer = MagicMock()
     mock_consumer.topics.side_effect = Exception("Connection refused")
-    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
+    with patch("sn_confluent.mirror.main.KafkaConsumer", return_value=mock_consumer):
         with pytest.raises(SystemExit):
             list_source_topics("kafka.example.com", 4100, "ca", "cert", "key")
     mock_consumer.close.assert_called_once()
+
+
+def test_list_source_topics_sets_kafka_timeouts():
+    from sn_confluent.mirror.main import (
+        KAFKA_CONNECTIONS_MAX_IDLE_MS,
+        KAFKA_METADATA_MAX_AGE_MS,
+        KAFKA_REQUEST_TIMEOUT_MS,
+        list_source_topics,
+    )
+    mock_consumer = MagicMock()
+    mock_consumer.topics.return_value = {"alpha"}
+    with patch("sn_confluent.mirror.main.KafkaConsumer", return_value=mock_consumer) as kafka_consumer:
+        list_source_topics("kafka.example.com", 4100, "ca", "cert", "key")
+    kafka_consumer.assert_called_once_with(
+        bootstrap_servers="kafka.example.com:4100,kafka.example.com:4101,kafka.example.com:4102,kafka.example.com:4103",
+        security_protocol="SSL",
+        ssl_cafile="ca",
+        ssl_certfile="cert",
+        ssl_keyfile="key",
+        request_timeout_ms=KAFKA_REQUEST_TIMEOUT_MS,
+        metadata_max_age_ms=KAFKA_METADATA_MAX_AGE_MS,
+        connections_max_idle_ms=KAFKA_CONNECTIONS_MAX_IDLE_MS,
+    )
 
 
 # ---------------------------------------------------------------------------
