@@ -8,27 +8,21 @@ import argparse
 import configparser
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
 
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+from shared.pem_common import (
+    SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER, CONFLUENT_INSTALL,
+    check_confluent_cli, check_auth, load_pem_files,
+)
+
 from kafka import KafkaConsumer
 
 INTERNAL_TOPIC_PREFIXES = ("__", "_confluent")
-# Defaults; both can be overridden in link.conf.
-SN_SOURCE_CLUSTERS = [4100, 4200]
-SN_BROKERS_PER_CLUSTER = 4
-
-CONFLUENT_INSTALL = """\
-Confluent CLI not found. Install it:
-
-  Windows : winget install Confluent.ConfluentCLI
-  macOS   : brew install confluentinc/tap/confluent-cli
-  Linux   : See https://docs.confluent.io/confluent-cli/current/install.html
-
-Then authenticate: confluent login
-"""
 
 
 def load_config(path: str) -> dict:
@@ -118,6 +112,7 @@ def get_mirrored_source_topics(cfg: dict) -> set:
                 if name.startswith(prefix):
                     source_names.add(name[len(prefix):])
         except (json.JSONDecodeError, AttributeError):
+            print(f"Warning: could not parse mirror list for cluster {port}", file=sys.stderr)
             continue
     return source_names
 
@@ -212,44 +207,16 @@ def create_mirror_topics(cfg: dict, topics: list, dry_run: bool) -> list:
     return failures
 
 
-def check_confluent_cli() -> None:
-    if shutil.which("confluent") is None:
-        print(CONFLUENT_INSTALL)
-        sys.exit(1)
-
-
-def check_auth(environment_id: str, cluster_id: str) -> None:
-    result = subprocess.run(
-        ["confluent", "kafka", "cluster", "describe", cluster_id,
-         "--environment", environment_id],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print("Error: Not authenticated or cluster not accessible. Run: confluent login",
-              file=sys.stderr)
-        sys.exit(1)
-
-
-def load_pem_files(pem_dir: str):
-    """Return (ca_path, cert_path, key_path) — kafka-python takes file paths."""
-    files = {"ca.pem": None, "client-cert.pem": None, "client-key.pem": None}
-    for name in files:
-        path = os.path.join(pem_dir, name)
-        if not os.path.exists(path):
-            print(f"Error: {name} not found in {pem_dir}. Run: python extract_pem.py first",
-                  file=sys.stderr)
-            sys.exit(1)
-        files[name] = path
-    return files["ca.pem"], files["client-cert.pem"], files["client-key.pem"]
-
-
 def main() -> None:
     import questionary
 
     parser = argparse.ArgumentParser(
         description="Mirror ServiceNow Kafka topics to Confluent Cloud across both cluster links."
     )
-    parser.add_argument("--config", default="../cluster-link/link.conf",
+    _default_config = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "cluster-link", "link.conf"
+    )
+    parser.add_argument("--config", default=_default_config,
                         help="Path to link.conf (default: ../cluster-link/link.conf)")
     parser.add_argument("--pem-dir", default=".",
                         help="Directory containing PEM files (default: ./)")
@@ -276,7 +243,7 @@ def main() -> None:
     cfg = load_config(args.config)
     check_confluent_cli()
     check_auth(cfg["environment_id"], cfg["cluster_id"])
-    ca, cert, key = load_pem_files(args.pem_dir)
+    ca, cert, key = load_pem_files(args.pem_dir, return_paths=True)
 
     if args.all:
         enable_auto_mirror(
