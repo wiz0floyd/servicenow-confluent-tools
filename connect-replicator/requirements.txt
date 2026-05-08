@@ -1,5 +1,0 @@
-# Optional: interactive topic picker wizard
-questionary>=2.0.0
-
-# Optional: listing topics on SN Hermes (sn-to-cc direction)
-kafka-python>=2.0.0

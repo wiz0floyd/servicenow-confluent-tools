@@ -1,35 +1,31 @@
 # Deploy a Confluent Replicator (ReplicatorSourceConnector) via Connect REST API.
 #
-# Setup: pip install -r requirements.txt
-# Usage: python setup_replicator.py [--config PATH] [--direction {cc-to-sn,sn-to-cc}]
-#        [--topics T1,T2,...] [--all] [--dry-run] [--no-wizard]
+# Usage: python -m sn_confluent.replicate.main [--config PATH]
+#        [--direction {cc-to-sn,sn-to-cc}] [--topics T1,T2,...] [--all]
+#        [--dry-run] [--no-wizard]
 
 import argparse
-import configparser
 import getpass
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+from typing import List, Optional
 
-# Defaults; both can be overridden in link.conf.
-SN_SOURCE_CLUSTERS = [4100, 4200]
-SN_BROKERS_PER_CLUSTER = 4
+from sn_confluent.core.pem import (
+    SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER, CONFLUENT_INSTALL,
+    check_confluent_cli, load_pem_files,
+)
+from sn_confluent.core.config import load_config as _core_load_config
+
 SN_INBOUND_PORT = 4000
 
-CONFLUENT_INSTALL = """\
-Confluent CLI not found. Install it:
-
-  Windows : winget install Confluent.ConfluentCLI
-  macOS   : brew install confluentinc/tap/confluent-cli
-  Linux   : See https://docs.confluent.io/confluent-cli/current/install.html
-
-Then authenticate: confluent login
-"""
+REQUIRED_KEYS = ("environment_id", "cluster_id", "connector_name", "source_host")
+# pem_dir is resolved from --pem-dir or the config's `pem_dir` key in main(); not
+# required at config-load time so the CLI flag can satisfy it on its own.
 
 OVERRIDE_POLICY_WARNING = """\
 Note: cc-to-sn uses producer.override.* to write to SN Hermes.
@@ -41,22 +37,14 @@ Docs: https://docs.confluent.io/platform/current/connect/security.html
 
 
 def load_config(path: str) -> dict:
-    """Load link.conf; exit 1 with a clear message on any problem."""
-    if not os.path.exists(path):
-        print(f"Error: Config file not found: {path}", file=sys.stderr)
-        sys.exit(1)
-    cfg = configparser.ConfigParser()
-    cfg.read(path)
-    if "confluent" not in cfg:
-        print("Error: link.conf is missing the [confluent] section.", file=sys.stderr)
-        sys.exit(1)
-    section = cfg["confluent"]
-    required = ("environment_id", "cluster_id", "connector_name", "source_host", "pem_dir")
-    for key in required:
-        if key not in section:
-            print(f"Error: Missing key in link.conf: {key}", file=sys.stderr)
-            sys.exit(1)
-    result = dict(section)
+    """Load link.conf via the shared loader, then coerce SN cluster fields.
+
+    Replicate doesn't use the per-cluster link-name expansion that link/mirror
+    rely on, so this stays a thin wrapper that adds only the
+    `source_clusters` / `brokers_per_cluster` coercion the rest of this
+    module expects.
+    """
+    result = _core_load_config(path, REQUIRED_KEYS)
     clusters_raw = result.get("source_clusters", "")
     result["source_clusters"] = (
         [int(x.strip()) for x in clusters_raw.split(",") if x.strip()]
@@ -66,28 +54,6 @@ def load_config(path: str) -> dict:
     bpc_raw = result.get("brokers_per_cluster", "")
     result["brokers_per_cluster"] = int(bpc_raw) if bpc_raw else SN_BROKERS_PER_CLUSTER
     return result
-
-
-def check_confluent_cli() -> None:
-    if shutil.which("confluent") is None:
-        print(CONFLUENT_INSTALL)
-        sys.exit(1)
-
-
-def load_pem_files(pem_dir: str) -> tuple:
-    """Return (ca_bytes, cert_bytes, key_bytes). Exits 1 if any file is missing."""
-    files = {"ca.pem": None, "client-cert.pem": None, "client-key.pem": None}
-    for name in files:
-        path = os.path.join(pem_dir, name)
-        if not os.path.exists(path):
-            print(
-                f"Error: {name} not found in {pem_dir}. Run: python extract_pem.py first",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        with open(path, "rb") as fh:
-            files[name] = fh.read()
-    return files["ca.pem"], files["client-cert.pem"], files["client-key.pem"]
 
 
 def resolve_key_password(client_key_bytes: bytes, cli_password: str | None) -> str | None:
@@ -401,7 +367,7 @@ def run_wizard(
     return selected, connector_name, group_id, topic_rename_format, connect_url
 
 
-def main() -> None:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Deploy a Confluent Replicator via Connect REST API."
     )
@@ -445,7 +411,7 @@ def main() -> None:
         "--no-wizard", action="store_true",
         help="Non-interactive mode; require topics via config, --topics, or --all",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # 1. Load config
     cfg = load_config(args.config)
@@ -454,7 +420,13 @@ def main() -> None:
     check_confluent_cli()
 
     # 3. Load PEM files
-    pem_dir = args.pem_dir or cfg["pem_dir"]
+    pem_dir = args.pem_dir or cfg.get("pem_dir")
+    if not pem_dir:
+        print(
+            "Error: pem_dir not specified. Pass --pem-dir or set pem_dir in link.conf.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     ca_pem, client_cert, client_key = load_pem_files(pem_dir)
 
     # 4. Resolve key password
@@ -545,7 +517,7 @@ def main() -> None:
             print(f"--- Connector: {config['name']} ---")
             print(f"POST {connect_url}/connectors")
             print(json.dumps({"name": config["name"], "config": config}, indent=2))
-        return
+        return 0
 
     # 12. Wizard confirmation
     if wizard_ran:
@@ -556,7 +528,7 @@ def main() -> None:
             import questionary
             if not questionary.confirm("Create connector(s)?", default=False).ask():
                 print("Aborted.")
-                return
+                return 0
         except ImportError:
             pass  # Should not happen — wizard already imported it
     elif not args.no_wizard and not args.topics and not use_all:
@@ -571,6 +543,8 @@ def main() -> None:
         poll_connector(connect_url, name, timeout=args.timeout)
         print(f"Connector '{name}' is RUNNING.")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

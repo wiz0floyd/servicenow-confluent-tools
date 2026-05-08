@@ -1,17 +1,16 @@
-# Extract PEM files from PKCS12 keystores for Confluent Cloud mTLS setup.
-#
-# Setup: pip install -r requirements.txt
-# Usage: python extract_pem.py [--keystore PATH] [--truststore PATH] [--out-dir PATH]
-#
-# Outputs:
-#   ca.pem          — CA certificates from truststore (upload to Confluent Cloud)
-#   client-cert.pem — Client certificate chain from keystore (leaf + intermediates)
-#   client-key.pem  — Client private key from keystore (PKCS8; encrypted if --key-password given)
+"""Extract CA and client PEM files from PKCS12 keystores for Confluent Cloud mTLS setup.
+
+Outputs (written to --out-dir):
+  ca.pem          — CA certificates from truststore (upload to Confluent Cloud)
+  client-cert.pem — Client certificate chain from keystore (leaf + intermediates)
+  client-key.pem  — Client private key from keystore (PKCS8; encrypted if --key-password given)
+"""
 
 import argparse
 import getpass
 import os
 import sys
+from typing import List, Optional
 
 from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption, BestAvailableEncryption
 from cryptography.exceptions import InvalidTag
@@ -104,7 +103,7 @@ def _write(path: str, data: bytes) -> None:
         fh.write(data)
 
 
-def main() -> None:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Extract CA and client PEM files from PKCS12 keystores for mTLS."
     )
@@ -124,7 +123,7 @@ def main() -> None:
         "--key-password", default=None, metavar="PASSWORD",
         help="Encrypt the output private key with this password (adds ssl.key.password support)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     password = getpass.getpass("Keystore password: ")
 
@@ -144,7 +143,8 @@ def main() -> None:
     print(f"Written: {ca_path}")
     print(f"Written: {cert_path}")
     print(f"Written: {key_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
