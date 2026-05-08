@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sn-confluent"
+version = "0.1.0"
+description = "CLI tools for integrating ServiceNow's Kafka infrastructure with Confluent Cloud."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "cryptography>=41.0.0",
+    "kafka-python>=2.0.0",
+    "pyperclip>=1.8.0",
+    "questionary>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+sn-confluent = "sn_confluent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["sn_confluent*", "shared*"]
