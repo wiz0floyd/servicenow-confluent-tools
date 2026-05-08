@@ -35,7 +35,7 @@ behavior. Phase 3 imports must use the `sn_confluent.core.pem` path.
 |---|---|
 | `link` | `environment_id`, `cluster_id`, `link_name` (+ either `source_bootstrap` or `source_host` — validate in tool, not core) |
 | `mirror` | `environment_id`, `cluster_id`, `link_name`, `source_host`, `instance_name` |
-| `replicate` | `environment_id`, `cluster_id`, `connector_name`, `source_host`, `pem_dir` |
+| `replicate` | `environment_id`, `cluster_id`, `connector_name`, `source_host` (`pem_dir` resolved from `--pem-dir` or config in main, not validated by core) |
 
 ## Phase 3 package layout
 

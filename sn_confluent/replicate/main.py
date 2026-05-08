@@ -23,7 +23,9 @@ from sn_confluent.core.config import load_config as _core_load_config
 
 SN_INBOUND_PORT = 4000
 
-REQUIRED_KEYS = ("environment_id", "cluster_id", "connector_name", "source_host", "pem_dir")
+REQUIRED_KEYS = ("environment_id", "cluster_id", "connector_name", "source_host")
+# pem_dir is resolved from --pem-dir or the config's `pem_dir` key in main(); not
+# required at config-load time so the CLI flag can satisfy it on its own.
 
 OVERRIDE_POLICY_WARNING = """\
 Note: cc-to-sn uses producer.override.* to write to SN Hermes.
@@ -418,7 +420,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     check_confluent_cli()
 
     # 3. Load PEM files
-    pem_dir = args.pem_dir or cfg["pem_dir"]
+    pem_dir = args.pem_dir or cfg.get("pem_dir")
+    if not pem_dir:
+        print(
+            "Error: pem_dir not specified. Pass --pem-dir or set pem_dir in link.conf.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     ca_pem, client_cert, client_key = load_pem_files(pem_dir)
 
     # 4. Resolve key password
