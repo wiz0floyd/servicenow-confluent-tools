@@ -26,19 +26,19 @@ def write_config(tmp_path, content=VALID_CONFIG):
 # ---------------------------------------------------------------------------
 
 def test_sn_bootstrap_4100():
-    from create_link import sn_bootstrap
+    from sn_confluent.link.main import sn_bootstrap
     result = sn_bootstrap("kafka.example.com", 4100)
     assert result == "kafka.example.com:4100,kafka.example.com:4101,kafka.example.com:4102,kafka.example.com:4103"
 
 
 def test_sn_bootstrap_4200():
-    from create_link import sn_bootstrap
+    from sn_confluent.link.main import sn_bootstrap
     result = sn_bootstrap("kafka.example.com", 4200)
     assert result == "kafka.example.com:4200,kafka.example.com:4201,kafka.example.com:4202,kafka.example.com:4203"
 
 
 def test_sn_bootstrap_custom_brokers_per_cluster():
-    from create_link import sn_bootstrap
+    from sn_confluent.link.main import sn_bootstrap
     result = sn_bootstrap("kafka.example.com", 5000, brokers_per_cluster=2)
     assert result == "kafka.example.com:5000,kafka.example.com:5001"
 
@@ -48,7 +48,7 @@ def test_sn_bootstrap_custom_brokers_per_cluster():
 # ---------------------------------------------------------------------------
 
 def test_load_config_returns_dict(tmp_path):
-    from create_link import load_config
+    from sn_confluent.link.main import load_config
     path = write_config(tmp_path)
     cfg = load_config(path)
     assert cfg["environment_id"] == "env-abc123"
@@ -58,14 +58,14 @@ def test_load_config_returns_dict(tmp_path):
 
 
 def test_load_config_exits_if_file_missing():
-    from create_link import load_config
+    from sn_confluent.link.main import load_config
     with pytest.raises(SystemExit) as exc:
         load_config("/nonexistent/link.conf")
     assert exc.value.code == 1
 
 
 def test_load_config_exits_if_key_missing(tmp_path):
-    from create_link import load_config
+    from sn_confluent.link.main import load_config
     bad = textwrap.dedent("""\
         [confluent]
         environment_id = env-abc123
@@ -78,7 +78,7 @@ def test_load_config_exits_if_key_missing(tmp_path):
 
 
 def test_load_config_accepts_source_host(tmp_path):
-    from create_link import load_config
+    from sn_confluent.link.main import load_config
     cfg_text = textwrap.dedent("""\
         [confluent]
         environment_id = env-abc123
@@ -92,7 +92,7 @@ def test_load_config_accepts_source_host(tmp_path):
 
 
 def test_load_config_defaults_source_clusters_and_brokers(tmp_path):
-    from create_link import load_config, SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
+    from sn_confluent.link.main import load_config, SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
     path = write_config(tmp_path)
     cfg = load_config(path)
     assert cfg["source_clusters"] == SN_SOURCE_CLUSTERS
@@ -100,7 +100,7 @@ def test_load_config_defaults_source_clusters_and_brokers(tmp_path):
 
 
 def test_load_config_reads_custom_source_clusters(tmp_path):
-    from create_link import load_config
+    from sn_confluent.link.main import load_config
     cfg_text = textwrap.dedent("""\
         [confluent]
         environment_id   = env-abc123
@@ -115,7 +115,7 @@ def test_load_config_reads_custom_source_clusters(tmp_path):
 
 
 def test_load_config_reads_custom_brokers_per_cluster(tmp_path):
-    from create_link import load_config
+    from sn_confluent.link.main import load_config
     cfg_text = textwrap.dedent("""\
         [confluent]
         environment_id      = env-abc123
@@ -130,7 +130,7 @@ def test_load_config_reads_custom_brokers_per_cluster(tmp_path):
 
 
 def test_load_config_exits_if_neither_source_key(tmp_path):
-    from create_link import load_config
+    from sn_confluent.link.main import load_config
     bad = textwrap.dedent("""\
         [confluent]
         environment_id = env-abc123
@@ -148,13 +148,13 @@ def test_load_config_exits_if_neither_source_key(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_check_confluent_cli_passes_when_found():
-    from create_link import check_confluent_cli
+    from sn_confluent.link.main import check_confluent_cli
     with patch("shutil.which", return_value="/usr/local/bin/confluent"):
         check_confluent_cli()  # Should not raise
 
 
 def test_check_confluent_cli_exits_when_missing(capsys):
-    from create_link import check_confluent_cli
+    from sn_confluent.link.main import check_confluent_cli
     with patch("shutil.which", return_value=None):
         with pytest.raises(SystemExit) as exc:
             check_confluent_cli()
@@ -168,14 +168,14 @@ def test_check_confluent_cli_exits_when_missing(capsys):
 # ---------------------------------------------------------------------------
 
 def test_check_auth_passes_when_cluster_describe_succeeds():
-    from create_link import check_auth
+    from sn_confluent.link.main import check_auth
     mock_result = MagicMock(returncode=0)
     with patch("subprocess.run", return_value=mock_result):
         check_auth("env-abc123", "lkc-abc123")  # Should not raise
 
 
 def test_check_auth_exits_when_cluster_describe_fails(capsys):
-    from create_link import check_auth
+    from sn_confluent.link.main import check_auth
     mock_result = MagicMock(returncode=1, stderr="Unauthorized")
     with patch("subprocess.run", return_value=mock_result):
         with pytest.raises(SystemExit) as exc:
@@ -190,7 +190,7 @@ def test_check_auth_exits_when_cluster_describe_fails(capsys):
 # ---------------------------------------------------------------------------
 
 def test_load_pem_files_returns_bytes(tmp_path):
-    from create_link import load_pem_files
+    from sn_confluent.link.main import load_pem_files
     (tmp_path / "ca.pem").write_bytes(b"CA")
     (tmp_path / "client-cert.pem").write_bytes(b"CERT")
     (tmp_path / "client-key.pem").write_bytes(b"KEY")
@@ -201,7 +201,7 @@ def test_load_pem_files_returns_bytes(tmp_path):
 
 
 def test_load_pem_files_exits_if_ca_missing(tmp_path, capsys):
-    from create_link import load_pem_files
+    from sn_confluent.link.main import load_pem_files
     (tmp_path / "client-cert.pem").write_bytes(b"CERT")
     (tmp_path / "client-key.pem").write_bytes(b"KEY")
     with pytest.raises(SystemExit) as exc:
@@ -216,7 +216,7 @@ def test_load_pem_files_exits_if_ca_missing(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 def test_build_ssl_properties_contains_required_keys():
-    from create_link import build_ssl_properties
+    from sn_confluent.link.main import build_ssl_properties
     result = build_ssl_properties(b"CA-PEM", b"CERT-PEM", b"KEY-PEM")
     assert "ssl.truststore.type=PEM" in result
     assert "ssl.keystore.type=PEM" in result
@@ -226,7 +226,7 @@ def test_build_ssl_properties_contains_required_keys():
 
 
 def test_build_ssl_properties_escapes_newlines():
-    from create_link import build_ssl_properties
+    from sn_confluent.link.main import build_ssl_properties
     CERT_KEYS = ("ssl.truststore.certificates", "ssl.keystore.certificate.chain", "ssl.keystore.key")
     result = build_ssl_properties(b"LINE1\nLINE2", b"L1\nL2", b"K1\nK2")
     lines = result.splitlines()
@@ -239,20 +239,20 @@ def test_build_ssl_properties_escapes_newlines():
 
 
 def test_build_ssl_properties_literal_newlines():
-    from create_link import build_ssl_properties
+    from sn_confluent.link.main import build_ssl_properties
     result = build_ssl_properties(b"LINE1\nLINE2", b"L1\nL2", b"K1\nK2", literal_newlines=True)
     assert "\\n" not in result
     assert "LINE1\nLINE2" in result
 
 
 def test_build_ssl_properties_includes_key_password():
-    from create_link import build_ssl_properties
+    from sn_confluent.link.main import build_ssl_properties
     result = build_ssl_properties(b"CA", b"CERT", b"KEY", key_password="secretpw")
     assert "ssl.key.password=secretpw" in result
 
 
 def test_build_ssl_properties_omits_key_password_when_not_set():
-    from create_link import build_ssl_properties
+    from sn_confluent.link.main import build_ssl_properties
     result = build_ssl_properties(b"CA", b"CERT", b"KEY")
     assert "ssl.key.password" not in result
 
@@ -264,7 +264,7 @@ def test_build_ssl_properties_omits_key_password_when_not_set():
 # ---------------------------------------------------------------------------
 
 def test_build_link_command_returns_correct_args():
-    from create_link import build_link_command
+    from sn_confluent.link.main import build_link_command
     cfg = {
         "link_name": "my-link",
         "environment_id": "env-123",
@@ -291,7 +291,7 @@ def test_build_link_command_returns_correct_args():
 # ---------------------------------------------------------------------------
 
 def test_dry_run_prints_command_without_running(capsys):
-    from create_link import run_link_create
+    from sn_confluent.link.main import run_link_create
     cmd = ["confluent", "kafka", "link", "create", "test-link"]
     with patch("subprocess.run") as mock_run:
         run_link_create(cmd, dry_run=True)
@@ -302,7 +302,7 @@ def test_dry_run_prints_command_without_running(capsys):
 
 
 def test_run_link_create_calls_subprocess():
-    from create_link import run_link_create
+    from sn_confluent.link.main import run_link_create
     cmd = ["confluent", "kafka", "link", "create", "test-link"]
     mock_result = MagicMock(returncode=0, stdout="Created link test-link")
     with patch("subprocess.run", return_value=mock_result) as mock_run:
@@ -311,7 +311,7 @@ def test_run_link_create_calls_subprocess():
 
 
 def test_run_link_create_exits_on_cli_failure(capsys):
-    from create_link import run_link_create
+    from sn_confluent.link.main import run_link_create
     cmd = ["confluent", "kafka", "link", "create", "test-link"]
     mock_result = MagicMock(returncode=1, stderr="Error: cluster not found")
     with patch("subprocess.run", return_value=mock_result):
@@ -327,7 +327,7 @@ def test_run_link_create_exits_on_cli_failure(capsys):
 # ---------------------------------------------------------------------------
 
 def test_copy_security_config_uses_pyperclip(capsys):
-    from create_link import copy_security_config
+    from sn_confluent.link.main import copy_security_config
     mock_pyperclip = MagicMock()
     with patch.dict("sys.modules", {"pyperclip": mock_pyperclip}):
         copy_security_config("ssl.truststore.type=PEM\n")
@@ -336,7 +336,7 @@ def test_copy_security_config_uses_pyperclip(capsys):
 
 
 def test_copy_security_config_fallback_windows(capsys):
-    from create_link import copy_security_config
+    from sn_confluent.link.main import copy_security_config
     import builtins
     real_import = builtins.__import__
 
@@ -371,14 +371,14 @@ def _describe_result(state: str):
 
 
 def test_wait_for_link_active_returns_on_active(capsys):
-    from create_link import wait_for_link_active
+    from sn_confluent.link.main import wait_for_link_active
     with patch("subprocess.run", return_value=_describe_result("ACTIVE")):
         wait_for_link_active(CFG, timeout=10)
     assert "ACTIVE" in capsys.readouterr().out
 
 
 def test_wait_for_link_active_exits_on_failed(capsys):
-    from create_link import wait_for_link_active
+    from sn_confluent.link.main import wait_for_link_active
     with patch("subprocess.run", return_value=_describe_result("FAILED")):
         with pytest.raises(SystemExit) as exc:
             wait_for_link_active(CFG, timeout=10)
@@ -387,7 +387,7 @@ def test_wait_for_link_active_exits_on_failed(capsys):
 
 
 def test_wait_for_link_active_retries_then_succeeds(capsys):
-    from create_link import wait_for_link_active
+    from sn_confluent.link.main import wait_for_link_active
     responses = [
         _describe_result("PENDING"),
         _describe_result("PENDING"),
@@ -400,7 +400,7 @@ def test_wait_for_link_active_retries_then_succeeds(capsys):
 
 
 def test_wait_for_link_active_exits_on_timeout():
-    from create_link import wait_for_link_active
+    from sn_confluent.link.main import wait_for_link_active
     with patch("subprocess.run", return_value=_describe_result("PENDING")):
         with patch("time.monotonic", side_effect=[0, 0, 999]):
             with patch("time.sleep"):
@@ -410,7 +410,7 @@ def test_wait_for_link_active_exits_on_timeout():
 
 
 def test_wait_for_link_active_handles_describe_failure(capsys):
-    from create_link import wait_for_link_active
+    from sn_confluent.link.main import wait_for_link_active
     fail = MagicMock(returncode=1, stdout="", stderr="connection refused")
     responses = [fail, fail, _describe_result("ACTIVE")]
     with patch("subprocess.run", side_effect=responses):
@@ -424,12 +424,12 @@ def test_wait_for_link_active_handles_describe_failure(capsys):
 # ---------------------------------------------------------------------------
 
 def test_dual_link_properties_include_4100_prefix():
-    from create_link import build_link_properties
+    from sn_confluent.link.main import build_link_properties
     props = build_link_properties(4100)
     assert "cluster.link.prefix=4100." in props
 
 def test_dual_link_properties_include_4200_prefix():
-    from create_link import build_link_properties
+    from sn_confluent.link.main import build_link_properties
     props = build_link_properties(4200)
     assert "cluster.link.prefix=4200." in props
 
@@ -440,7 +440,7 @@ def test_dual_link_properties_include_4200_prefix():
 
 def test_single_cluster_mode_does_not_crash_or_add_prefix(tmp_path, capsys):
     """source_bootstrap mode must not try to extract a port from link_name."""
-    from create_link import main
+    from sn_confluent.link.main import main
     cfg_text = textwrap.dedent("""\
         [confluent]
         environment_id   = env-abc123
@@ -460,8 +460,8 @@ def test_single_cluster_mode_does_not_crash_or_add_prefix(tmp_path, capsys):
         "--pem-dir", str(tmp_path),
         "--dry-run",
     ]):
-        with patch("create_link.check_confluent_cli"):
-            with patch("create_link.check_auth"):
+        with patch("sn_confluent.link.main.check_confluent_cli"):
+            with patch("sn_confluent.link.main.check_auth"):
                 with patch("subprocess.run", return_value=mock_run):
                     main()  # must not raise ValueError / IndexError
 
@@ -471,7 +471,7 @@ def test_single_cluster_mode_does_not_crash_or_add_prefix(tmp_path, capsys):
 
 def test_dual_cluster_mode_adds_port_prefix(tmp_path, capsys):
     """source_host mode must add cluster.link.prefix for each port."""
-    from create_link import main
+    from sn_confluent.link.main import main
     cfg_text = textwrap.dedent("""\
         [confluent]
         environment_id = env-abc123
@@ -491,8 +491,8 @@ def test_dual_cluster_mode_adds_port_prefix(tmp_path, capsys):
         "--pem-dir", str(tmp_path),
         "--dry-run",
     ]):
-        with patch("create_link.check_confluent_cli"):
-            with patch("create_link.check_auth"):
+        with patch("sn_confluent.link.main.check_confluent_cli"):
+            with patch("sn_confluent.link.main.check_auth"):
                 main()  # must not raise
 
     out = capsys.readouterr().out
