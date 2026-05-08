@@ -208,7 +208,7 @@ def test_load_pem_files_exits_if_ca_missing(tmp_path, capsys):
         load_pem_files(str(tmp_path))
     assert exc.value.code == 1
     captured = capsys.readouterr()
-    assert "extract_pem.py" in captured.err
+    assert "sn-confluent extract" in captured.err
 
 
 # ---------------------------------------------------------------------------

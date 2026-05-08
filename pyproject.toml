@@ -25,4 +25,4 @@ dev = [
 sn-confluent = "sn_confluent.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["sn_confluent*", "shared*"]
+include = ["sn_confluent*"]

@@ -1,10 +1,4 @@
-"""Transitional re-exports of PEM / Confluent CLI helpers.
-
-Phase 2 of the unified-CLI refactor wraps `shared.pem_common` (created in
-PR #24) so future Phase 3 / Phase 4 code can depend on a stable
-`sn_confluent.core.pem` import path. Once the legacy `shared/` directory is
-retired, this module's contents will be inlined here without changing the
-public API.
+"""PEM / Confluent CLI helpers shared across all subcommands.
 
 Public API: `SN_SOURCE_CLUSTERS`, `SN_BROKERS_PER_CLUSTER`,
 `CONFLUENT_INSTALL`, `check_confluent_cli()`, `check_auth()`,
@@ -14,24 +8,70 @@ Public API: `SN_SOURCE_CLUSTERS`, `SN_BROKERS_PER_CLUSTER`,
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 
-# Bootstrap: when run from the repo root (not yet pip-installed) the `shared`
-# package lives at the repo root, not on sys.path. Mirror the same trick the
-# existing tools use so this module works both when installed and when run in
-# place.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+SN_SOURCE_CLUSTERS = [4100, 4200]
+SN_BROKERS_PER_CLUSTER = 4
 
-from shared.pem_common import (  # noqa: E402  (sys.path bootstrap above)
-    SN_SOURCE_CLUSTERS,
-    SN_BROKERS_PER_CLUSTER,
-    CONFLUENT_INSTALL,
-    check_confluent_cli,
-    check_auth,
-    load_pem_files,
-)
+CONFLUENT_INSTALL = """\
+Confluent CLI not found. Install it:
+
+  Windows : winget install Confluent.ConfluentCLI
+  macOS   : brew install confluentinc/tap/confluent-cli
+  Linux   : See https://docs.confluent.io/confluent-cli/current/install.html
+
+Then authenticate: confluent login
+"""
+
+
+def check_confluent_cli() -> None:
+    if shutil.which("confluent") is None:
+        print(CONFLUENT_INSTALL)
+        sys.exit(1)
+
+
+def check_auth(environment_id: str, cluster_id: str) -> None:
+    """Verify Confluent CLI auth by describing the destination cluster."""
+    result = subprocess.run(
+        [
+            "confluent", "kafka", "cluster", "describe",
+            cluster_id,
+            "--environment", environment_id,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(
+            "Error: Not authenticated or cluster not accessible. Run: confluent login",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def load_pem_files(pem_dir: str, return_paths: bool = False) -> tuple:
+    """Return (ca, cert, key) as bytes (default) or file paths when return_paths=True.
+
+    kafka-python takes file paths; Confluent SSL properties take raw bytes.
+    """
+    files = {"ca.pem": None, "client-cert.pem": None, "client-key.pem": None}
+    for name in files:
+        path = os.path.join(pem_dir, name)
+        if not os.path.exists(path):
+            print(
+                f"Error: {name} not found in {pem_dir}. Run: sn-confluent extract first",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if return_paths:
+            files[name] = path
+        else:
+            with open(path, "rb") as fh:
+                files[name] = fh.read()
+    return files["ca.pem"], files["client-cert.pem"], files["client-key.pem"]
+
 
 __all__ = [
     "SN_SOURCE_CLUSTERS",

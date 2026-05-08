@@ -1,4 +1,4 @@
-# Create a Confluent Cloud Cluster Link using PEM files from extract_pem.py.
+# Create a Confluent Cloud Cluster Link using PEM files from `sn-confluent extract`.
 #
 # Setup: pip install -e .  (from the repo root; deps tracked in pyproject.toml)
 # Usage: python -m sn_confluent.link.main [--config PATH] [--pem-dir PATH] [--dry-run] [--timeout SECS]
