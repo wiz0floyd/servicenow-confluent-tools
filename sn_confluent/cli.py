@@ -1,52 +1,72 @@
-"""Unified `sn-confluent` CLI dispatcher (Phase 2 stub).
+"""Unified `sn-confluent` CLI dispatcher.
 
-Subcommand handlers are wired in Phase 4 of the unified-CLI refactor.
-For now each subcommand prints a "not yet wired" message and exits 0,
-so the `pip install -e .` console-script entry point installs cleanly.
+Routes the first positional to a subcommand's `main(argv)` entry point and
+forwards the remaining args. Subcommands are imported lazily so a simple
+`sn-confluent --help` doesn't pull in every tool's dependencies.
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
-from typing import List, Optional
-
-SUBCOMMANDS = ("extract", "link", "mirror", "replicate", "setup")
+from typing import Callable, List, Optional
 
 
-def _stub(name: str) -> int:
-    print(f"sn-confluent {name}: not yet wired (Phase 4)")
-    return 0
+SUBCOMMAND_HELP = {
+    "extract": "Extract PEM files from PKCS12 keystores",
+    "link": "Create a Confluent Cloud cluster link",
+    "mirror": "Mirror ServiceNow Kafka topics to Confluent Cloud",
+    "replicate": "Deploy a Confluent Replicator connector",
+    "setup": "Guided end-to-end setup wizard",
+}
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="sn-confluent",
-        description="ServiceNow <-> Confluent Cloud integration toolkit.",
-    )
-    sub = parser.add_subparsers(dest="command", metavar="<command>")
+def _load_subcommand(name: str) -> Callable[[Optional[List[str]]], int]:
+    if name == "extract":
+        from sn_confluent.extract.main import main
+    elif name == "link":
+        from sn_confluent.link.main import main
+    elif name == "mirror":
+        from sn_confluent.mirror.main import main
+    elif name == "replicate":
+        from sn_confluent.replicate.main import main
+    elif name == "setup":
+        from sn_confluent.setup.wizard import main
+    else:
+        raise KeyError(name)
+    return main
 
-    sub.add_parser("extract", help="Extract PEM files from JKS keystores")
-    sub.add_parser("link", help="Create a Confluent Cloud cluster link")
-    sub.add_parser("mirror", help="Mirror ServiceNow Kafka topics to Confluent Cloud")
-    sub.add_parser("replicate", help="Deploy a Confluent Replicator connector")
-    sub.add_parser("setup", help="Guided end-to-end setup wizard")
 
-    return parser
+def _print_root_help() -> None:
+    print("usage: sn-confluent <command> [<args>]")
+    print()
+    print("ServiceNow <-> Confluent Cloud integration toolkit.")
+    print()
+    print("Commands:")
+    width = max(len(c) for c in SUBCOMMAND_HELP) + 2
+    for cmd, help_text in SUBCOMMAND_HELP.items():
+        print(f"  {cmd.ljust(width)}{help_text}")
+    print()
+    print("Run 'sn-confluent <command> --help' for command-specific options.")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = build_parser()
-    # Only parse the first positional so subcommand-specific argv is preserved
-    # for Phase 4 dispatch. Today we just acknowledge the subcommand and exit.
-    args, _remaining = parser.parse_known_args(argv)
-    if not args.command:
-        parser.print_help()
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help"):
+        _print_root_help()
         return 0
-    if args.command in SUBCOMMANDS:
-        return _stub(args.command)
-    parser.error(f"unknown command: {args.command}")
-    return 2  # pragma: no cover  # parser.error() exits, this is unreachable
+    cmd, rest = argv[0], argv[1:]
+    if cmd not in SUBCOMMAND_HELP:
+        print(f"sn-confluent: unknown command: {cmd}", file=sys.stderr)
+        _print_root_help()
+        return 2
+    try:
+        subcommand_main = _load_subcommand(cmd)
+    except ImportError as exc:
+        print(f"sn-confluent {cmd}: not yet wired ({exc})", file=sys.stderr)
+        return 2
+    result = subcommand_main(rest)
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
