@@ -1,32 +1,37 @@
-# Create a Confluent Cloud Cluster Link using PEM files from extract_pem.py.
+# Create a Confluent Cloud Cluster Link using PEM files from `sn-confluent extract`.
 #
-# Setup: pip install -r requirements.txt  (no extra deps beyond cryptography)
-# Usage: python create_link.py [--config PATH] [--pem-dir PATH] [--dry-run] [--timeout SECS]
+# Setup: pip install -e .  (from the repo root; deps tracked in pyproject.toml)
+# Usage: python -m sn_confluent.link.main [--config PATH] [--pem-dir PATH] [--dry-run] [--timeout SECS]
 #
 # Prereqs:
 #   1. Confluent CLI installed and 'confluent login' completed
-#   2. PEM files generated:  python extract_pem.py
+#   2. PEM files generated:  python -m sn_confluent.extract.main
 #   3. link.conf filled in with your environment/cluster IDs
 
 import argparse
-import configparser
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
+from typing import List, Optional
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
-from shared.pem_common import (
-    SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER, CONFLUENT_INSTALL,
-    check_confluent_cli, check_auth, load_pem_files,
+from sn_confluent.core.config import (
+    expand_link_config,
+    load_config as _load_config_core,
+)
+from sn_confluent.core.pem import (
+    CONFLUENT_INSTALL,
+    SN_BROKERS_PER_CLUSTER,
+    SN_SOURCE_CLUSTERS,
+    check_auth,
+    check_confluent_cli,
+    load_pem_files,
 )
 
 
-REQUIRED_KEYS = ("environment_id", "cluster_id", "link_name")
+REQUIRED_KEYS = ["environment_id", "cluster_id", "link_name"]
 
 
 def sn_bootstrap(host: str, base_port: int, brokers_per_cluster: int = SN_BROKERS_PER_CLUSTER) -> str:
@@ -35,37 +40,23 @@ def sn_bootstrap(host: str, base_port: int, brokers_per_cluster: int = SN_BROKER
 
 
 def load_config(path: str) -> dict:
-    """Load link.conf; exit 1 with a clear message on any problem."""
-    if not os.path.exists(path):
-        print(f"Error: Config file not found: {path}", file=sys.stderr)
-        sys.exit(1)
-    cfg = configparser.ConfigParser()
-    cfg.read(path)
-    if "confluent" not in cfg:
-        print("Error: link.conf is missing the [confluent] section.", file=sys.stderr)
-        sys.exit(1)
-    section = cfg["confluent"]
-    for key in REQUIRED_KEYS:
-        if key not in section:
-            print(f"Error: Missing key in link.conf: {key}", file=sys.stderr)
-            sys.exit(1)
-    if "source_bootstrap" not in section and "source_host" not in section:
+    """Load link.conf; exit 1 with a clear message on any problem.
+
+    Delegates to `sn_confluent.core.config.load_config` for the file/section
+    + required-key checks, then enforces the link-specific rule that either
+    `source_bootstrap` or `source_host` is present, and finally applies
+    `expand_link_config()` for `source_clusters` / `brokers_per_cluster`
+    coercion with ServiceNow defaults.
+    """
+    result = _load_config_core(path, REQUIRED_KEYS)
+    if "source_bootstrap" not in result and "source_host" not in result:
         print(
             "Error: Missing key in link.conf: source_bootstrap "
             "(or source_host for ServiceNow dual-cluster mode)",
             file=sys.stderr,
         )
         sys.exit(1)
-    result = dict(section)
-    clusters_raw = result.get("source_clusters", "")
-    result["source_clusters"] = (
-        [int(x.strip()) for x in clusters_raw.split(",") if x.strip()]
-        if clusters_raw
-        else list(SN_SOURCE_CLUSTERS)
-    )
-    bpc_raw = result.get("brokers_per_cluster", "")
-    result["brokers_per_cluster"] = int(bpc_raw) if bpc_raw else SN_BROKERS_PER_CLUSTER
-    return result
+    return expand_link_config(result)
 
 
 def _inline(pem_bytes: bytes, literal_newlines: bool = False) -> str:
@@ -211,7 +202,7 @@ def build_link_properties(port: int) -> str:
     return f"cluster.link.prefix={port}.\n"
 
 
-def main() -> None:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Create a Confluent Cloud Cluster Link using extracted PEM files."
     )
@@ -243,7 +234,7 @@ def main() -> None:
         "--key-password", default=None, metavar="PASSWORD",
         help="Password for an encrypted private key; adds ssl.key.password to the properties",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
     ca_pem, client_cert, client_key = load_pem_files(args.pem_dir)
@@ -253,7 +244,7 @@ def main() -> None:
                                          literal_newlines=args.literal_newlines,
                                          key_password=args.key_password)
         copy_security_config(ssl_props)
-        return
+        return 0
 
     check_confluent_cli()
     check_auth(cfg["environment_id"], cfg["cluster_id"])
@@ -304,6 +295,8 @@ def main() -> None:
             wait_for_link_active(link_cfg, timeout=args.timeout)
             print(f"Cluster Link '{link_cfg['link_name']}' is ACTIVE.")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

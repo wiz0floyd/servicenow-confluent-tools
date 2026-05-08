@@ -1,3 +1,12 @@
+"""PEM / Confluent CLI helpers shared across all subcommands.
+
+Public API: `SN_SOURCE_CLUSTERS`, `SN_BROKERS_PER_CLUSTER`,
+`CONFLUENT_INSTALL`, `check_confluent_cli()`, `check_auth()`,
+`load_pem_files()`. See `sn_confluent/core/CONTRACT.md`.
+"""
+
+from __future__ import annotations
+
 import os
 import shutil
 import subprocess
@@ -52,7 +61,7 @@ def load_pem_files(pem_dir: str, return_paths: bool = False) -> tuple:
         path = os.path.join(pem_dir, name)
         if not os.path.exists(path):
             print(
-                f"Error: {name} not found in {pem_dir}. Run: python extract_pem.py first",
+                f"Error: {name} not found in {pem_dir}. Run: sn-confluent extract first",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -62,3 +71,13 @@ def load_pem_files(pem_dir: str, return_paths: bool = False) -> tuple:
             with open(path, "rb") as fh:
                 files[name] = fh.read()
     return files["ca.pem"], files["client-cert.pem"], files["client-key.pem"]
+
+
+__all__ = [
+    "SN_SOURCE_CLUSTERS",
+    "SN_BROKERS_PER_CLUSTER",
+    "CONFLUENT_INSTALL",
+    "check_confluent_cli",
+    "check_auth",
+    "load_pem_files",
+]

@@ -74,7 +74,7 @@ def write_p12(tmp_path, filename, data):
 # ---------------------------------------------------------------------------
 
 def test_extract_ca_pem_returns_pem_bytes(tmp_path):
-    from extract_pem import extract_ca_pem
+    from sn_confluent.extract.main import extract_ca_pem
     path = write_p12(tmp_path, "truststore", make_truststore_p12(num_certs=1))
     result = extract_ca_pem(path, TEST_PASSWORD)
     assert result.startswith(b"-----BEGIN CERTIFICATE-----")
@@ -82,19 +82,19 @@ def test_extract_ca_pem_returns_pem_bytes(tmp_path):
 
 
 def test_extract_ca_pem_includes_all_certs(tmp_path):
-    from extract_pem import extract_ca_pem
+    from sn_confluent.extract.main import extract_ca_pem
     path = write_p12(tmp_path, "truststore", make_truststore_p12(num_certs=3))
     result = extract_ca_pem(path, TEST_PASSWORD)
     assert result.count(b"-----BEGIN CERTIFICATE-----") == 3
 
 
 def test_extract_ca_pem_empty_store_returns_empty_bytes(tmp_path, capsys):
-    from extract_pem import extract_ca_pem
+    from sn_confluent.extract.main import extract_ca_pem
     # PKCS12 with no certs at all — use a keystore-style but with no chain
     # The simplest empty-ish case: truststore with 0 certs triggers the warning path
     # We test this by patching load_p12 to return (None, None, None)
     from unittest.mock import patch
-    with patch("extract_pem.load_p12", return_value=(None, None, None)):
+    with patch("sn_confluent.extract.main.load_p12", return_value=(None, None, None)):
         result = extract_ca_pem("fake", TEST_PASSWORD)
     assert result == b""
     captured = capsys.readouterr()
@@ -106,23 +106,23 @@ def test_extract_ca_pem_empty_store_returns_empty_bytes(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 def test_extract_client_cert_pem_returns_pem_bytes(tmp_path):
-    from extract_pem import extract_client_cert_pem
+    from sn_confluent.extract.main import extract_client_cert_pem
     path = write_p12(tmp_path, "keystore", make_keystore_p12())
     result = extract_client_cert_pem(path, TEST_PASSWORD)
     assert result.startswith(b"-----BEGIN CERTIFICATE-----")
 
 
 def test_extract_client_cert_pem_includes_chain(tmp_path):
-    from extract_pem import extract_client_cert_pem
+    from sn_confluent.extract.main import extract_client_cert_pem
     path = write_p12(tmp_path, "keystore", make_keystore_p12(num_chain_certs=1))
     result = extract_client_cert_pem(path, TEST_PASSWORD)
     assert result.count(b"-----BEGIN CERTIFICATE-----") == 2
 
 
 def test_extract_client_cert_pem_empty_store_warns(capsys):
-    from extract_pem import extract_client_cert_pem
+    from sn_confluent.extract.main import extract_client_cert_pem
     from unittest.mock import patch
-    with patch("extract_pem.load_p12", return_value=(None, None, None)):
+    with patch("sn_confluent.extract.main.load_p12", return_value=(None, None, None)):
         result = extract_client_cert_pem("fake", TEST_PASSWORD)
     assert result == b""
     captured = capsys.readouterr()
@@ -134,14 +134,14 @@ def test_extract_client_cert_pem_empty_store_warns(capsys):
 # ---------------------------------------------------------------------------
 
 def test_extract_client_key_pem_returns_pem_bytes(tmp_path):
-    from extract_pem import extract_client_key_pem
+    from sn_confluent.extract.main import extract_client_key_pem
     path = write_p12(tmp_path, "keystore", make_keystore_p12())
     result = extract_client_key_pem(path, TEST_PASSWORD)
     assert b"-----BEGIN PRIVATE KEY-----" in result
 
 
 def test_extract_client_key_pem_is_unencrypted(tmp_path):
-    from extract_pem import extract_client_key_pem
+    from sn_confluent.extract.main import extract_client_key_pem
     path = write_p12(tmp_path, "keystore", make_keystore_p12())
     result = extract_client_key_pem(path, TEST_PASSWORD)
     assert b"-----BEGIN PRIVATE KEY-----" in result
@@ -149,7 +149,7 @@ def test_extract_client_key_pem_is_unencrypted(tmp_path):
 
 
 def test_extract_client_key_pem_is_encrypted_when_key_password_given(tmp_path):
-    from extract_pem import extract_client_key_pem
+    from sn_confluent.extract.main import extract_client_key_pem
     path = write_p12(tmp_path, "keystore", make_keystore_p12())
     result = extract_client_key_pem(path, TEST_PASSWORD, key_encrypt_password="secretpw")
     assert b"-----BEGIN ENCRYPTED PRIVATE KEY-----" in result
@@ -157,9 +157,9 @@ def test_extract_client_key_pem_is_encrypted_when_key_password_given(tmp_path):
 
 
 def test_extract_client_key_pem_no_key_warns(capsys):
-    from extract_pem import extract_client_key_pem
+    from sn_confluent.extract.main import extract_client_key_pem
     from unittest.mock import patch
-    with patch("extract_pem.load_p12", return_value=(None, None, None)):
+    with patch("sn_confluent.extract.main.load_p12", return_value=(None, None, None)):
         result = extract_client_key_pem("fake", TEST_PASSWORD)
     assert result == b""
     captured = capsys.readouterr()
@@ -171,7 +171,7 @@ def test_extract_client_key_pem_no_key_warns(capsys):
 # ---------------------------------------------------------------------------
 
 def test_set_key_permissions_sets_0600_on_unix():
-    from extract_pem import set_key_permissions
+    from sn_confluent.extract.main import set_key_permissions
     if os.name == "nt":
         pytest.skip("Unix-only test")
     with tempfile.NamedTemporaryFile(delete=False) as f:
@@ -184,7 +184,7 @@ def test_set_key_permissions_sets_0600_on_unix():
 
 
 def test_set_key_permissions_warns_on_windows(capsys):
-    from extract_pem import set_key_permissions
+    from sn_confluent.extract.main import set_key_permissions
     from unittest.mock import patch
     with tempfile.NamedTemporaryFile(delete=False) as f:
         path = f.name
@@ -202,14 +202,14 @@ def test_set_key_permissions_warns_on_windows(capsys):
 # ---------------------------------------------------------------------------
 
 def test_load_p12_exits_if_file_not_found():
-    from extract_pem import load_p12
+    from sn_confluent.extract.main import load_p12
     with pytest.raises(SystemExit) as exc:
         load_p12("/nonexistent/path/keystore", TEST_PASSWORD)
     assert exc.value.code == 1
 
 
 def test_load_p12_exits_on_wrong_password(tmp_path):
-    from extract_pem import load_p12
+    from sn_confluent.extract.main import load_p12
     path = write_p12(tmp_path, "keystore", make_keystore_p12(password="correct"))
     with pytest.raises(SystemExit) as exc:
         load_p12(path, "wrongpassword")
