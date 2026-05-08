@@ -5,34 +5,36 @@ Mirrors ServiceNow Kafka topics to Confluent Cloud across all source cluster lin
 ## Prerequisites
 
 - Confluent CLI installed and authenticated (`confluent login`)
-- PEM files from [`extract-pem`](../extract-pem/) or equivalent
-- `link.conf` configured via [`cluster-link`](../cluster-link/)
+- PEM files from `extract-pem` or equivalent
+- `link.conf` configured via the `link` subcommand
 
 ## Setup
 
+From the repo root:
+
 ```bash
-pip install -r requirements.txt
+pip install -e .[dev]
 ```
 
 ## Usage
 
 ```bash
-python mirror_topics.py [--config PATH] [--pem-dir PATH] [--filter PREFIX] [--all] [--dry-run]
-                        [--include-prefixes PREFIX ...] [--exclude-prefixes PREFIX ...]
-                        [--include-topics TOPIC ...] [--exclude-topics TOPIC ...]
+python -m sn_confluent.mirror.main [--config PATH] [--pem-dir PATH] [--filter PREFIX] [--all] [--dry-run]
+                                   [--include-prefixes PREFIX ...] [--exclude-prefixes PREFIX ...]
+                                   [--include-topics TOPIC ...] [--exclude-topics TOPIC ...]
 ```
 
 Default run — shows a checkbox list of topics filtered by `instance_name` from `link.conf`:
 
 ```bash
-python mirror_topics.py --pem-dir /tmp/pems
+python -m sn_confluent.mirror.main --pem-dir /tmp/pems
 ```
 
 ## Options
 
 | Flag | Default | Description |
 |---|---|---|
-| `--config PATH` | `../cluster-link/link.conf` | Path to config file |
+| `--config PATH` | `../link/link.conf` | Path to config file |
 | `--pem-dir PATH` | `./` | Directory containing PEM files |
 | `--filter PREFIX` | `instance_name` from config | Pre-filter topics by prefix before showing the UI |
 | `--all` | off | Enable `auto.create.mirror.topics.enable=true` on both links and exit (skips UI) |
@@ -62,6 +64,5 @@ instance_name  = myinstance            # default topic filter prefix
 ## Tests
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+pytest sn_confluent/mirror/tests/
 ```

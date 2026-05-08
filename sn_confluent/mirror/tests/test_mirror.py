@@ -1,10 +1,7 @@
 import json
-import sys
 import textwrap
 import pytest
 from unittest.mock import patch, MagicMock
-
-sys.path.insert(0, ".")
 
 VALID_CONFIG = textwrap.dedent("""\
     [confluent]
@@ -27,7 +24,7 @@ def write_config(tmp_path, content=VALID_CONFIG):
 # ---------------------------------------------------------------------------
 
 def test_load_config_returns_dict_with_link_names(tmp_path):
-    from mirror_topics import load_config
+    from sn_confluent.mirror.main import load_config
     cfg = load_config(write_config(tmp_path))
     assert cfg["environment_id"] == "env-abc123"
     assert cfg["link_name_4100"] == "servicenow-link-4100"
@@ -35,14 +32,14 @@ def test_load_config_returns_dict_with_link_names(tmp_path):
 
 
 def test_load_config_defaults_source_clusters_and_brokers(tmp_path):
-    from mirror_topics import load_config, SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
+    from sn_confluent.mirror.main import load_config, SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
     cfg = load_config(write_config(tmp_path))
     assert cfg["source_clusters"] == SN_SOURCE_CLUSTERS
     assert cfg["brokers_per_cluster"] == SN_BROKERS_PER_CLUSTER
 
 
 def test_load_config_reads_custom_source_clusters(tmp_path):
-    from mirror_topics import load_config
+    from sn_confluent.mirror.main import load_config
     custom = textwrap.dedent("""\
         [confluent]
         environment_id  = env-abc123
@@ -59,7 +56,7 @@ def test_load_config_reads_custom_source_clusters(tmp_path):
 
 
 def test_load_config_reads_custom_brokers_per_cluster(tmp_path):
-    from mirror_topics import load_config
+    from sn_confluent.mirror.main import load_config
     custom = textwrap.dedent("""\
         [confluent]
         environment_id      = env-abc123
@@ -74,14 +71,14 @@ def test_load_config_reads_custom_brokers_per_cluster(tmp_path):
 
 
 def test_load_config_exits_if_missing():
-    from mirror_topics import load_config
+    from sn_confluent.mirror.main import load_config
     with pytest.raises(SystemExit) as exc:
         load_config("/nonexistent/link.conf")
     assert exc.value.code == 1
 
 
 def test_load_config_exits_if_no_source_host(tmp_path):
-    from mirror_topics import load_config
+    from sn_confluent.mirror.main import load_config
     bad = textwrap.dedent("""\
         [confluent]
         environment_id = env-abc123
@@ -95,7 +92,7 @@ def test_load_config_exits_if_no_source_host(tmp_path):
 
 
 def test_load_config_exits_if_no_instance_name(tmp_path):
-    from mirror_topics import load_config
+    from sn_confluent.mirror.main import load_config
     bad = textwrap.dedent("""\
         [confluent]
         environment_id = env-abc123
@@ -109,7 +106,7 @@ def test_load_config_exits_if_no_instance_name(tmp_path):
 
 
 def test_load_config_exposes_instance_name(tmp_path):
-    from mirror_topics import load_config
+    from sn_confluent.mirror.main import load_config
     cfg = load_config(write_config(tmp_path))
     assert cfg["instance_name"] == "snc.myinstance"
 
@@ -119,20 +116,20 @@ def test_load_config_exposes_instance_name(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_list_source_topics_returns_sorted_list():
-    from mirror_topics import list_source_topics
+    from sn_confluent.mirror.main import list_source_topics
     mock_consumer = MagicMock()
     mock_consumer.topics.return_value = {"zebra", "alpha", "__consumer_offsets"}
-    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
+    with patch("sn_confluent.mirror.main.KafkaConsumer", return_value=mock_consumer):
         topics = list_source_topics("kafka.example.com", 4100, "ca", "cert", "key")
     assert topics == ["alpha", "zebra"]
     assert "__consumer_offsets" not in topics
 
 
 def test_list_source_topics_applies_filter():
-    from mirror_topics import list_source_topics
+    from sn_confluent.mirror.main import list_source_topics
     mock_consumer = MagicMock()
     mock_consumer.topics.return_value = {"sn_foo", "sn_bar", "other"}
-    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
+    with patch("sn_confluent.mirror.main.KafkaConsumer", return_value=mock_consumer):
         topics = list_source_topics(
             "kafka.example.com", 4100, "ca", "cert", "key", filter_prefix="sn_"
         )
@@ -141,10 +138,10 @@ def test_list_source_topics_applies_filter():
 
 
 def test_list_source_topics_exits_on_connection_error(capsys):
-    from mirror_topics import list_source_topics
+    from sn_confluent.mirror.main import list_source_topics
     mock_consumer = MagicMock()
     mock_consumer.topics.side_effect = Exception("Connection refused")
-    with patch("mirror_topics.KafkaConsumer", return_value=mock_consumer):
+    with patch("sn_confluent.mirror.main.KafkaConsumer", return_value=mock_consumer):
         with pytest.raises(SystemExit) as exc:
             list_source_topics("kafka.example.com", 4100, "ca", "cert", "key")
     assert exc.value.code == 1
@@ -156,7 +153,7 @@ def test_list_source_topics_exits_on_connection_error(capsys):
 # ---------------------------------------------------------------------------
 
 def test_get_mirrored_source_topics_strips_prefix():
-    from mirror_topics import get_mirrored_source_topics
+    from sn_confluent.mirror.main import get_mirrored_source_topics
     link_cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
@@ -171,21 +168,21 @@ def test_get_mirrored_source_topics_strips_prefix():
             return MagicMock(returncode=0, stdout=mirrors_4100)
         return MagicMock(returncode=0, stdout=mirrors_4200)
 
-    with patch("subprocess.run", side_effect=fake_run):
+    with patch("sn_confluent.mirror.main.subprocess.run", side_effect=fake_run):
         result = get_mirrored_source_topics(link_cfg)
 
     assert result == {"foo", "bar", "baz"}
 
 
 def test_get_mirrored_source_topics_returns_empty_on_cli_failure():
-    from mirror_topics import get_mirrored_source_topics
+    from sn_confluent.mirror.main import get_mirrored_source_topics
     link_cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
         "environment_id": "env-abc123",
         "cluster_id": "lkc-abc123",
     }
-    with patch("subprocess.run", return_value=MagicMock(returncode=1, stdout="")):
+    with patch("sn_confluent.mirror.main.subprocess.run", return_value=MagicMock(returncode=1, stdout="")):
         result = get_mirrored_source_topics(link_cfg)
     assert result == set()
 
@@ -195,14 +192,14 @@ def test_get_mirrored_source_topics_returns_empty_on_cli_failure():
 # ---------------------------------------------------------------------------
 
 def test_enable_auto_mirror_dry_run_prints_commands(capsys):
-    from mirror_topics import enable_auto_mirror
+    from sn_confluent.mirror.main import enable_auto_mirror
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
         "environment_id": "env-abc123",
         "cluster_id": "lkc-abc123",
     }
-    with patch("subprocess.run") as mock_run:
+    with patch("sn_confluent.mirror.main.subprocess.run") as mock_run:
         enable_auto_mirror(cfg, dry_run=True)
         mock_run.assert_not_called()
     out = capsys.readouterr().out
@@ -213,7 +210,7 @@ def test_enable_auto_mirror_dry_run_prints_commands(capsys):
 
 
 def test_enable_auto_mirror_calls_update_on_both_links():
-    from mirror_topics import enable_auto_mirror
+    from sn_confluent.mirror.main import enable_auto_mirror
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
@@ -221,7 +218,7 @@ def test_enable_auto_mirror_calls_update_on_both_links():
         "cluster_id": "lkc-abc123",
     }
     mock_result = MagicMock(returncode=0, stdout="Updated.")
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    with patch("sn_confluent.mirror.main.subprocess.run", return_value=mock_result) as mock_run:
         enable_auto_mirror(cfg, dry_run=False)
     assert mock_run.call_count == 2
     calls = [str(c) for c in mock_run.call_args_list]
@@ -230,28 +227,28 @@ def test_enable_auto_mirror_calls_update_on_both_links():
 
 
 def test_enable_auto_mirror_exits_on_cli_failure(capsys):
-    from mirror_topics import enable_auto_mirror
+    from sn_confluent.mirror.main import enable_auto_mirror
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
         "environment_id": "env-abc123",
         "cluster_id": "lkc-abc123",
     }
-    with patch("subprocess.run", return_value=MagicMock(returncode=1, stderr="fail")):
+    with patch("sn_confluent.mirror.main.subprocess.run", return_value=MagicMock(returncode=1, stderr="fail")):
         with pytest.raises(SystemExit) as exc:
             enable_auto_mirror(cfg, dry_run=False)
     assert exc.value.code == 1
 
 
 def test_enable_auto_mirror_with_filters_includes_filter_config(capsys):
-    from mirror_topics import enable_auto_mirror
+    from sn_confluent.mirror.main import enable_auto_mirror
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
         "environment_id": "env-abc123",
         "cluster_id": "lkc-abc123",
     }
-    with patch("subprocess.run") as mock_run:
+    with patch("sn_confluent.mirror.main.subprocess.run") as mock_run:
         enable_auto_mirror(cfg, dry_run=True, include_prefixes=["snc.hermes1"])
         mock_run.assert_not_called()
     # filter key/value appear in the printed config file contents block
@@ -264,7 +261,7 @@ def test_enable_auto_mirror_with_filters_includes_filter_config(capsys):
 
 def test_enable_auto_mirror_with_filters_live_run_passes_config_file_and_cleans_up():
     import os
-    from mirror_topics import enable_auto_mirror
+    from sn_confluent.mirror.main import enable_auto_mirror
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
@@ -278,7 +275,7 @@ def test_enable_auto_mirror_with_filters_live_run_passes_config_file_and_cleans_
         config_paths.append(cmd[config_idx])
         return MagicMock(returncode=0, stdout="Updated.")
 
-    with patch("subprocess.run", side_effect=capture_config_path):
+    with patch("sn_confluent.mirror.main.subprocess.run", side_effect=capture_config_path):
         enable_auto_mirror(cfg, dry_run=False, include_prefixes=["snc.hermes1"])
 
     assert len(config_paths) == 2
@@ -293,36 +290,36 @@ def test_enable_auto_mirror_with_filters_live_run_passes_config_file_and_cleans_
 # ---------------------------------------------------------------------------
 
 def test_build_mirror_filters_returns_none_when_no_args():
-    from mirror_topics import build_mirror_filters
+    from sn_confluent.mirror.main import build_mirror_filters
     assert build_mirror_filters() is None
 
 
 def test_build_mirror_filters_include_prefix():
-    from mirror_topics import build_mirror_filters
+    from sn_confluent.mirror.main import build_mirror_filters
     result = json.loads(build_mirror_filters(include_prefixes=["snc."]))
     assert result == {"topicFilters": [{"filterType": "INCLUDE", "name": "snc.", "patternType": "PREFIXED"}]}
 
 
 def test_build_mirror_filters_exclude_prefix():
-    from mirror_topics import build_mirror_filters
+    from sn_confluent.mirror.main import build_mirror_filters
     result = json.loads(build_mirror_filters(exclude_prefixes=["internal"]))
     assert result == {"topicFilters": [{"filterType": "EXCLUDE", "name": "internal", "patternType": "PREFIXED"}]}
 
 
 def test_build_mirror_filters_include_topic():
-    from mirror_topics import build_mirror_filters
+    from sn_confluent.mirror.main import build_mirror_filters
     result = json.loads(build_mirror_filters(include_topics=["my-topic"]))
     assert result == {"topicFilters": [{"filterType": "INCLUDE", "name": "my-topic", "patternType": "LITERAL"}]}
 
 
 def test_build_mirror_filters_exclude_topic():
-    from mirror_topics import build_mirror_filters
+    from sn_confluent.mirror.main import build_mirror_filters
     result = json.loads(build_mirror_filters(exclude_topics=["skip-me"]))
     assert result == {"topicFilters": [{"filterType": "EXCLUDE", "name": "skip-me", "patternType": "LITERAL"}]}
 
 
 def test_build_mirror_filters_multiple_entries():
-    from mirror_topics import build_mirror_filters
+    from sn_confluent.mirror.main import build_mirror_filters
     result = json.loads(build_mirror_filters(
         include_prefixes=["snc.hermes1"],
         exclude_prefixes=["internal"],
@@ -343,7 +340,7 @@ def test_build_mirror_filters_multiple_entries():
 # ---------------------------------------------------------------------------
 
 def test_create_mirror_topics_builds_correct_commands():
-    from mirror_topics import create_mirror_topics
+    from sn_confluent.mirror.main import create_mirror_topics
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
@@ -351,7 +348,7 @@ def test_create_mirror_topics_builds_correct_commands():
         "cluster_id": "lkc-abc123",
     }
     mock_result = MagicMock(returncode=0, stdout="Created.")
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    with patch("sn_confluent.mirror.main.subprocess.run", return_value=mock_result) as mock_run:
         failed = create_mirror_topics(cfg, ["foo", "bar"], dry_run=False)
     assert mock_run.call_count == 4
     calls_flat = " ".join(str(c) for c in mock_run.call_args_list)
@@ -362,14 +359,14 @@ def test_create_mirror_topics_builds_correct_commands():
 
 
 def test_create_mirror_topics_dry_run_no_subprocess(capsys):
-    from mirror_topics import create_mirror_topics
+    from sn_confluent.mirror.main import create_mirror_topics
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
         "environment_id": "env-abc123",
         "cluster_id": "lkc-abc123",
     }
-    with patch("subprocess.run") as mock_run:
+    with patch("sn_confluent.mirror.main.subprocess.run") as mock_run:
         create_mirror_topics(cfg, ["foo"], dry_run=True)
         mock_run.assert_not_called()
     out = capsys.readouterr().out
@@ -378,7 +375,7 @@ def test_create_mirror_topics_dry_run_no_subprocess(capsys):
 
 
 def test_create_mirror_topics_continues_after_failure():
-    from mirror_topics import create_mirror_topics
+    from sn_confluent.mirror.main import create_mirror_topics
     cfg = {
         "link_name_4100": "servicenow-link-4100",
         "link_name_4200": "servicenow-link-4200",
@@ -391,7 +388,7 @@ def test_create_mirror_topics_continues_after_failure():
         MagicMock(returncode=0, stdout="Created."),
         MagicMock(returncode=0, stdout="Created."),
     ]
-    with patch("subprocess.run", side_effect=responses):
+    with patch("sn_confluent.mirror.main.subprocess.run", side_effect=responses):
         failed = create_mirror_topics(cfg, ["foo", "bar"], dry_run=False)
     assert len(failed) == 1
     assert "foo" in failed[0]
