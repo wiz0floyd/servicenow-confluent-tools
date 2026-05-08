@@ -1,18 +1,14 @@
-"""Tests for setup_replicator.py"""
+"""Tests for sn_confluent.replicate.main."""
 
 import json
 import os
-import sys
 import tempfile
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Ensure the parent package is importable.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-import setup_replicator as sr
+from sn_confluent.replicate import main as sr
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -226,7 +222,7 @@ def test_source_clusters_default(tmp):
 # =========================================================================
 
 
-@patch("setup_replicator.subprocess.run")
+@patch("sn_confluent.replicate.main.subprocess.run")
 def test_list_cc_topics(mock_run):
     mock_run.return_value = MagicMock(
         returncode=0,
@@ -241,14 +237,14 @@ def test_list_cc_topics(mock_run):
     mock_run.assert_called_once()
 
 
-@patch("setup_replicator.subprocess.run")
+@patch("sn_confluent.replicate.main.subprocess.run")
 def test_list_cc_topics_failure_exits(mock_run):
     mock_run.return_value = MagicMock(returncode=1, stderr="oops")
     with pytest.raises(SystemExit):
         sr.list_cc_topics("env-1", "lkc-1")
 
 
-@patch("setup_replicator.KafkaAdminClient", create=True)
+@patch("sn_confluent.replicate.main.KafkaAdminClient", create=True)
 def test_list_sn_topics(_unused):
     """Mock KafkaAdminClient at the import location inside list_sn_topics."""
     mock_admin_instance = MagicMock()
@@ -270,7 +266,7 @@ def test_list_sn_topics(_unused):
 # =========================================================================
 
 
-@patch("setup_replicator.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
 def test_create_connector_success(mock_urlopen):
     config = {"name": "repl-1", "connector.class": "Replicator"}
     resp_body = json.dumps({"name": "repl-1"}).encode()
@@ -291,7 +287,7 @@ def test_create_connector_success(mock_urlopen):
     assert "connector.class" in body["config"]
 
 
-@patch("setup_replicator.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
 def test_create_connector_http_error_exits(mock_urlopen):
     import urllib.error
     error = urllib.error.HTTPError(
@@ -326,8 +322,8 @@ def _mock_urlopen_responses(states):
     return responses
 
 
-@patch("setup_replicator.time.sleep", return_value=None)
-@patch("setup_replicator.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.time.sleep", return_value=None)
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
 def test_poll_provisioning_then_running(mock_urlopen, _sleep):
     mock_urlopen.side_effect = _mock_urlopen_responses([
         ("PROVISIONING", []),
@@ -337,8 +333,8 @@ def test_poll_provisioning_then_running(mock_urlopen, _sleep):
     sr.poll_connector("http://localhost:8083", "repl-1", timeout=60, interval=1)
 
 
-@patch("setup_replicator.time.sleep", return_value=None)
-@patch("setup_replicator.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.time.sleep", return_value=None)
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
 def test_poll_failed_exits(mock_urlopen, _sleep):
     mock_urlopen.side_effect = _mock_urlopen_responses([
         ("FAILED", [{"id": 0, "trace": "NullPointerException"}]),
@@ -348,9 +344,9 @@ def test_poll_failed_exits(mock_urlopen, _sleep):
     assert exc.value.code == 1
 
 
-@patch("setup_replicator.time.sleep", return_value=None)
-@patch("setup_replicator.time.monotonic")
-@patch("setup_replicator.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.time.sleep", return_value=None)
+@patch("sn_confluent.replicate.main.time.monotonic")
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
 def test_poll_timeout_exits(mock_urlopen, mock_monotonic, _sleep):
     # Simulate time passing beyond the deadline
     mock_monotonic.side_effect = [0, 0, 200]  # start, first check, second check past deadline
@@ -381,15 +377,15 @@ def _write_full_conf(tmp, pem_dir, extra=""):
     return _write_conf(tmp, conf)
 
 
-@patch("setup_replicator.urllib.request.urlopen")
-@patch("setup_replicator.check_confluent_cli")
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.check_confluent_cli")
 def test_dry_run_all_no_wizard(mock_cli_check, mock_urlopen):
     """--dry-run --all --no-wizard should exit 0 with no REST call."""
     with tempfile.TemporaryDirectory() as tmp:
         pem_dir = _make_pem_dir(tmp)
         conf_path = _write_full_conf(tmp, pem_dir)
         with patch("sys.argv", [
-            "setup_replicator.py",
+            "sn_confluent.replicate.main",
             "--config", conf_path,
             "--dry-run", "--all", "--no-wizard",
         ]):
@@ -397,15 +393,15 @@ def test_dry_run_all_no_wizard(mock_cli_check, mock_urlopen):
     mock_urlopen.assert_not_called()
 
 
-@patch("setup_replicator.urllib.request.urlopen")
-@patch("setup_replicator.check_confluent_cli")
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.check_confluent_cli")
 def test_direction_sn_to_cc_all_produces_two_configs(mock_cli_check, mock_urlopen):
     """--direction sn-to-cc --all --no-wizard --dry-run produces two configs (default clusters)."""
     with tempfile.TemporaryDirectory() as tmp:
         pem_dir = _make_pem_dir(tmp)
         conf_path = _write_full_conf(tmp, pem_dir)
         with patch("sys.argv", [
-            "setup_replicator.py",
+            "sn_confluent.replicate.main",
             "--config", conf_path,
             "--direction", "sn-to-cc",
             "--dry-run", "--all", "--no-wizard",
@@ -421,8 +417,8 @@ def test_direction_sn_to_cc_all_produces_two_configs(mock_cli_check, mock_urlope
     mock_urlopen.assert_not_called()
 
 
-@patch("setup_replicator.urllib.request.urlopen")
-@patch("setup_replicator.check_confluent_cli")
+@patch("sn_confluent.replicate.main.urllib.request.urlopen")
+@patch("sn_confluent.replicate.main.check_confluent_cli")
 def test_topics_flag_produces_correct_regex(mock_cli_check, mock_urlopen):
     """--topics t1,t2 --no-wizard --dry-run should produce ^(t1|t2)$ regex."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -431,7 +427,7 @@ def test_topics_flag_produces_correct_regex(mock_cli_check, mock_urlopen):
         import io
         captured = io.StringIO()
         with patch("sys.argv", [
-            "setup_replicator.py",
+            "sn_confluent.replicate.main",
             "--config", conf_path,
             "--topics", "t1,t2",
             "--dry-run", "--no-wizard",
