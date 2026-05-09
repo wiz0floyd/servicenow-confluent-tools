@@ -102,16 +102,19 @@ python setup_replicator.py --connect-url http://my-worker:8083
 | `--all` | off | Replicate all topics (skips wizard) |
 | `--no-wizard` | off | Disable interactive topic picker |
 | `--connect-url URL` | `http://localhost:8083` | Connect worker REST endpoint |
-| `--key-password PW` | none | Password for encrypted private key (prefer env var) |
 | `--dry-run` | off | Print connector config JSON without creating |
 
 ## Private key password
 
-If your `client-key.pem` is encrypted, provide the password in one of three ways (listed by preference):
+If your `client-key.pem` is encrypted, provide the password via the `KEY_PASSWORD` environment variable (non-interactive) or omit it to be prompted automatically when the key is detected as encrypted:
 
-1. **Environment variable** (recommended): `export REPLICATOR_KEY_PASSWORD=...`
-2. **Interactive prompt**: the script asks automatically when the key is encrypted
-3. **CLI flag**: `--key-password SECRET` -- works but the password is visible in shell history
+```bash
+# Non-interactive (CI / scripting)
+KEY_PASSWORD=yourpassword sn-confluent replicate
+
+# Interactive — prompted only if the key is encrypted
+sn-confluent replicate
+```
 
 ## Troubleshooting
 
