@@ -460,10 +460,11 @@ def test_single_cluster_mode_does_not_crash_or_add_prefix(tmp_path, capsys):
         "--pem-dir", str(tmp_path),
         "--dry-run",
     ]):
-        with patch("sn_confluent.link.main.check_confluent_cli"):
-            with patch("sn_confluent.link.main.check_auth"):
-                with patch("subprocess.run", return_value=mock_run):
-                    main()  # must not raise ValueError / IndexError
+        with patch("sn_confluent.link.main._resolve_key_password", return_value=None):
+            with patch("sn_confluent.link.main.check_confluent_cli"):
+                with patch("sn_confluent.link.main.check_auth"):
+                    with patch("subprocess.run", return_value=mock_run):
+                        main()  # must not raise ValueError / IndexError
 
     out = capsys.readouterr().out
     assert "cluster.link.prefix" not in out
@@ -491,10 +492,48 @@ def test_dual_cluster_mode_adds_port_prefix(tmp_path, capsys):
         "--pem-dir", str(tmp_path),
         "--dry-run",
     ]):
-        with patch("sn_confluent.link.main.check_confluent_cli"):
-            with patch("sn_confluent.link.main.check_auth"):
-                main()  # must not raise
+        with patch("sn_confluent.link.main._resolve_key_password", return_value=None):
+            with patch("sn_confluent.link.main.check_confluent_cli"):
+                with patch("sn_confluent.link.main.check_auth"):
+                    main()  # must not raise
 
     out = capsys.readouterr().out
     assert "4100" in out
     assert "4200" in out
+
+
+# ---------------------------------------------------------------------------
+# _resolve_key_password
+# ---------------------------------------------------------------------------
+
+def test_resolve_key_password_uses_env_var(monkeypatch):
+    from sn_confluent.link.main import _resolve_key_password
+    monkeypatch.setenv("KEY_PASSWORD", "env-secret")
+    assert _resolve_key_password() == "env-secret"
+
+
+def test_resolve_key_password_env_var_empty_returns_none(monkeypatch):
+    from sn_confluent.link.main import _resolve_key_password
+    monkeypatch.setenv("KEY_PASSWORD", "")
+    assert _resolve_key_password() is None
+
+
+def test_resolve_key_password_prompts_when_env_unset(monkeypatch):
+    from sn_confluent.link.main import _resolve_key_password
+    monkeypatch.delenv("KEY_PASSWORD", raising=False)
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: "typed-secret")
+    assert _resolve_key_password() == "typed-secret"
+
+
+def test_resolve_key_password_prompt_empty_returns_none(monkeypatch):
+    from sn_confluent.link.main import _resolve_key_password
+    monkeypatch.delenv("KEY_PASSWORD", raising=False)
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: "")
+    assert _resolve_key_password() is None
+
+
+def test_resolve_key_password_env_var_skips_prompt(monkeypatch):
+    from sn_confluent.link.main import _resolve_key_password
+    monkeypatch.setenv("KEY_PASSWORD", "env-secret")
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: (_ for _ in ()).throw(AssertionError("getpass must not be called when env var is set")))
+    assert _resolve_key_password() == "env-secret"

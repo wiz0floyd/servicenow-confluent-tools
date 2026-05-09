@@ -9,6 +9,7 @@
 #   3. link.conf filled in with your environment/cluster IDs
 
 import argparse
+import getpass
 import json
 import os
 import subprocess
@@ -32,6 +33,15 @@ from sn_confluent.core.pem import (
 
 
 REQUIRED_KEYS = ["environment_id", "cluster_id", "link_name"]
+
+
+def _resolve_key_password() -> str | None:
+    """Return the key encryption password from env var or interactive prompt."""
+    pw = os.environ.get("KEY_PASSWORD")
+    if pw is not None:
+        return pw or None
+    entered = getpass.getpass("Key encryption password (Enter to skip): ")
+    return entered or None
 
 
 def sn_bootstrap(host: str, base_port: int, brokers_per_cluster: int = SN_BROKERS_PER_CLUSTER) -> str:
@@ -230,19 +240,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--literal-newlines", action="store_true",
         help="Use actual newlines in PEM values instead of \\\\n escapes (try this if the web console rejects the default format)",
     )
-    parser.add_argument(
-        "--key-password", default=None, metavar="PASSWORD",
-        help="Password for an encrypted private key; adds ssl.key.password to the properties",
-    )
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
     ca_pem, client_cert, client_key = load_pem_files(args.pem_dir)
+    key_password = _resolve_key_password()
 
     if args.copy_config:
         ssl_props = build_ssl_properties(ca_pem, client_cert, client_key,
                                          literal_newlines=args.literal_newlines,
-                                         key_password=args.key_password)
+                                         key_password=key_password)
         copy_security_config(ssl_props)
         return 0
 
@@ -274,7 +281,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         ssl_props = build_ssl_properties(
             ca_pem, client_cert, client_key,
             literal_newlines=args.literal_newlines,
-            key_password=args.key_password,
+            key_password=key_password,
         )
         props = ssl_props + build_link_properties(link_cfg["_port"]) if dual_cluster else ssl_props
 
