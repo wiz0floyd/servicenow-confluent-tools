@@ -28,6 +28,9 @@ from sn_confluent.core.config import (
 from kafka import KafkaConsumer
 
 INTERNAL_TOPIC_PREFIXES = ("__", "_confluent")
+KAFKA_REQUEST_TIMEOUT_MS = 30_000
+KAFKA_METADATA_MAX_AGE_MS = 10_000
+KAFKA_CONNECTIONS_MAX_IDLE_MS = 30_000
 
 REQUIRED_KEYS = ("environment_id", "cluster_id", "link_name", "source_host", "instance_name")
 
@@ -57,9 +60,14 @@ def list_source_topics(
             ssl_cafile=ca_path,
             ssl_certfile=cert_path,
             ssl_keyfile=key_path,
+            request_timeout_ms=KAFKA_REQUEST_TIMEOUT_MS,
+            metadata_max_age_ms=KAFKA_METADATA_MAX_AGE_MS,
+            connections_max_idle_ms=KAFKA_CONNECTIONS_MAX_IDLE_MS,
         )
-        raw_topics = consumer.topics()
-        consumer.close()
+        try:
+            raw_topics = consumer.topics()
+        finally:
+            consumer.close()
     except Exception as exc:
         print(f"Error: Failed to connect to source brokers: {exc}", file=sys.stderr)
         sys.exit(1)
