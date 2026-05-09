@@ -32,17 +32,20 @@ Prompts once for the keystore password, then writes:
 | `--keystore PATH` | `./keystore` | Path to PKCS12 keystore |
 | `--truststore PATH` | `./truststore` | Path to PKCS12 truststore |
 | `--out-dir PATH` | `./` | Directory to write PEM files |
-| `--key-password PASSWORD` | none | Encrypt the output private key with this password |
 
 ### Encrypted key output
 
-If your Confluent Cloud cluster requires `ssl.key.password`, pass `--key-password` to produce an encrypted PKCS8 key:
+If your Confluent Cloud cluster requires `ssl.key.password`, set `KEY_PASSWORD` to produce an encrypted PKCS8 key:
 
 ```bash
-python extract_pem.py --key-password yourpassword
+# Non-interactive (CI / scripting)
+KEY_PASSWORD=yourpassword sn-confluent extract
+
+# Interactive — omit the env var and you'll be prompted
+sn-confluent extract
 ```
 
-Then supply the same password to `create_link.py --key-password`.
+Supply the same password when running `sn-confluent link`.
 
 ## Tests
 

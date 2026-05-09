@@ -53,11 +53,16 @@ python create_link.py --pem-dir /path/to/pems
 |---|---|---|
 | `--config PATH` | `./link.conf` | Path to config file |
 | `--pem-dir PATH` | `./` | Directory containing PEM files |
-| `--key-password PASSWORD` | none | Password for encrypted private key; adds `ssl.key.password` |
 | `--timeout SECS` | `60` | Seconds to wait for `ACTIVE` state |
 | `--dry-run` | off | Print CLI command without executing |
 | `--copy-config` | off | Copy SSL properties to clipboard for pasting into the web console |
 | `--literal-newlines` | off | Use actual newlines in PEM values instead of `\n` escapes |
+
+If your private key is encrypted, set `KEY_PASSWORD` before running (non-interactive) or omit it to be prompted:
+
+```bash
+KEY_PASSWORD=yourpassword sn-confluent link
+```
 
 ### Web console path
 
