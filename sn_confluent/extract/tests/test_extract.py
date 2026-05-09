@@ -198,6 +198,43 @@ def test_set_key_permissions_warns_on_windows(capsys):
 
 
 # ---------------------------------------------------------------------------
+# _resolve_key_password
+# ---------------------------------------------------------------------------
+
+def test_resolve_key_password_uses_env_var(monkeypatch):
+    from sn_confluent.extract.main import _resolve_key_password
+    monkeypatch.setenv("KEY_PASSWORD", "env-secret")
+    assert _resolve_key_password() == "env-secret"
+
+
+def test_resolve_key_password_env_var_empty_returns_none(monkeypatch):
+    from sn_confluent.extract.main import _resolve_key_password
+    monkeypatch.setenv("KEY_PASSWORD", "")
+    assert _resolve_key_password() is None
+
+
+def test_resolve_key_password_prompts_when_env_unset(monkeypatch):
+    from sn_confluent.extract.main import _resolve_key_password
+    monkeypatch.delenv("KEY_PASSWORD", raising=False)
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: "typed-secret")
+    assert _resolve_key_password() == "typed-secret"
+
+
+def test_resolve_key_password_prompt_empty_returns_none(monkeypatch):
+    from sn_confluent.extract.main import _resolve_key_password
+    monkeypatch.delenv("KEY_PASSWORD", raising=False)
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: "")
+    assert _resolve_key_password() is None
+
+
+def test_resolve_key_password_env_var_skips_prompt(monkeypatch):
+    from sn_confluent.extract.main import _resolve_key_password
+    monkeypatch.setenv("KEY_PASSWORD", "env-secret")
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: (_ for _ in ()).throw(AssertionError("getpass must not be called when env var is set")))
+    assert _resolve_key_password() == "env-secret"
+
+
+# ---------------------------------------------------------------------------
 # load_p12 error handling
 # ---------------------------------------------------------------------------
 

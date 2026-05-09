@@ -3,7 +3,12 @@
 Outputs (written to --out-dir):
   ca.pem          — CA certificates from truststore (upload to Confluent Cloud)
   client-cert.pem — Client certificate chain from keystore (leaf + intermediates)
-  client-key.pem  — Client private key from keystore (PKCS8; encrypted if --key-password given)
+  client-key.pem  — Client private key from keystore (PKCS8; encrypted if KEY_PASSWORD set)
+
+Key encryption password resolution order:
+  1. KEY_PASSWORD environment variable (non-interactive / CI)
+  2. Interactive prompt via getpass (terminal use)
+  Set to empty string or omit to produce an unencrypted private key.
 """
 
 import argparse
@@ -98,6 +103,15 @@ def set_key_permissions(path: str) -> None:
         )
 
 
+def _resolve_key_password() -> str | None:
+    """Return the key encryption password from env var or interactive prompt."""
+    pw = os.environ.get("KEY_PASSWORD")
+    if pw is not None:
+        return pw or None
+    entered = getpass.getpass("Key encryption password (Enter to skip): ")
+    return entered or None
+
+
 def _write(path: str, data: bytes) -> None:
     with open(path, "wb") as fh:
         fh.write(data)
@@ -119,17 +133,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--out-dir", default=".",
         help="Directory to write output PEM files (default: ./)",
     )
-    parser.add_argument(
-        "--key-password", default=None, metavar="PASSWORD",
-        help="Encrypt the output private key with this password (adds ssl.key.password support)",
-    )
     args = parser.parse_args(argv)
 
     password = getpass.getpass("Keystore password: ")
+    key_password = _resolve_key_password()
 
     ca_pem = extract_ca_pem(args.truststore, password)
     client_cert_pem = extract_client_cert_pem(args.keystore, password)
-    client_key_pem = extract_client_key_pem(args.keystore, password, args.key_password)
+    client_key_pem = extract_client_key_pem(args.keystore, password, key_password)
 
     ca_path = os.path.join(args.out_dir, "ca.pem")
     cert_path = os.path.join(args.out_dir, "client-cert.pem")
