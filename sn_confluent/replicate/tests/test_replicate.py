@@ -436,3 +436,39 @@ def test_topics_flag_produces_correct_regex(mock_cli_check, mock_urlopen):
                 sr.main()
         output = captured.getvalue()
     assert "^(t1|t2)$" in output
+
+
+# ---------------------------------------------------------------------------
+# resolve_key_password
+# ---------------------------------------------------------------------------
+
+UNENCRYPTED_KEY = b"-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n"
+ENCRYPTED_KEY = b"-----BEGIN ENCRYPTED PRIVATE KEY-----\nfake\n-----END ENCRYPTED PRIVATE KEY-----\n"
+
+
+def test_resolve_key_password_uses_env_var(monkeypatch):
+    monkeypatch.setenv("KEY_PASSWORD", "env-secret")
+    assert sr.resolve_key_password(UNENCRYPTED_KEY) == "env-secret"
+
+
+def test_resolve_key_password_env_var_empty_returns_none(monkeypatch):
+    monkeypatch.setenv("KEY_PASSWORD", "")
+    assert sr.resolve_key_password(UNENCRYPTED_KEY) is None
+
+
+def test_resolve_key_password_env_var_skips_prompt(monkeypatch):
+    monkeypatch.setenv("KEY_PASSWORD", "env-secret")
+    monkeypatch.setattr("getpass.getpass", lambda _: (_ for _ in ()).throw(AssertionError("getpass must not be called")))
+    assert sr.resolve_key_password(ENCRYPTED_KEY) == "env-secret"
+
+
+def test_resolve_key_password_prompts_when_key_encrypted(monkeypatch):
+    monkeypatch.delenv("KEY_PASSWORD", raising=False)
+    monkeypatch.setattr("getpass.getpass", lambda _: "typed-secret")
+    assert sr.resolve_key_password(ENCRYPTED_KEY) == "typed-secret"
+
+
+def test_resolve_key_password_no_prompt_for_unencrypted_key(monkeypatch):
+    monkeypatch.delenv("KEY_PASSWORD", raising=False)
+    monkeypatch.setattr("getpass.getpass", lambda _: (_ for _ in ()).throw(AssertionError("getpass must not be called for unencrypted key")))
+    assert sr.resolve_key_password(UNENCRYPTED_KEY) is None

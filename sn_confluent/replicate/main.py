@@ -56,20 +56,13 @@ def load_config(path: str) -> dict:
     return result
 
 
-def resolve_key_password(client_key_bytes: bytes, cli_password: str | None) -> str | None:
-    """Resolve the private key password from env, interactive prompt, or CLI flag."""
-    env_pw = os.environ.get("REPLICATOR_KEY_PASSWORD")
-    if env_pw:
-        return env_pw
+def resolve_key_password(client_key_bytes: bytes) -> str | None:
+    """Resolve the private key password from env var or interactive prompt."""
+    env_pw = os.environ.get("KEY_PASSWORD")
+    if env_pw is not None:
+        return env_pw or None
     if b"ENCRYPTED" in client_key_bytes:
         return getpass.getpass("Private key is encrypted. Enter password: ")
-    if cli_password:
-        print(
-            "Warning: --key-password passes the password via command line. "
-            "It may appear in shell history.",
-            file=sys.stderr,
-        )
-        return cli_password
     return None
 
 
@@ -396,10 +389,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Connect REST endpoint override",
     )
     parser.add_argument(
-        "--key-password", default=None, metavar="PASSWORD",
-        help="Private key password (warning: visible in shell history)",
-    )
-    parser.add_argument(
         "--timeout", type=int, default=120,
         help="Per-connector poll timeout in seconds (default: 120)",
     )
@@ -430,7 +419,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ca_pem, client_cert, client_key = load_pem_files(pem_dir)
 
     # 4. Resolve key password
-    key_password = resolve_key_password(client_key, args.key_password)
+    key_password = resolve_key_password(client_key)
 
     # 5. Resolve direction
     direction = args.direction or cfg.get("direction", "cc-to-sn")
