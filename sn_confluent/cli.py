@@ -15,6 +15,7 @@ SUBCOMMAND_HELP = {
     "extract": "Extract PEM files from PKCS12 keystores",
     "link": "Create a Confluent Cloud cluster link",
     "mirror": "Mirror ServiceNow Kafka topics to Confluent Cloud",
+    "worker": "Generate Connect worker config and start script for Replicator",
     "replicate": "Deploy a Confluent Replicator connector",
     "setup": "Guided end-to-end setup wizard",
 }
@@ -27,6 +28,8 @@ def _load_subcommand(name: str) -> Callable[[Optional[List[str]]], int]:
         from sn_confluent.link.main import main
     elif name == "mirror":
         from sn_confluent.mirror.main import main
+    elif name == "worker":
+        from sn_confluent.worker.main import main
     elif name == "replicate":
         from sn_confluent.replicate.main import main
     elif name == "setup":
