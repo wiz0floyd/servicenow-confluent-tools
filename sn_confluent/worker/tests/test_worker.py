@@ -95,6 +95,13 @@ class TestGetCcBootstrap:
             get_cc_bootstrap("env-x", "lkc-y")
         assert exc.value.code == 1
 
+    @patch("sn_confluent.worker.main.subprocess.run")
+    def test_malformed_json_exits(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="not-json")
+        with pytest.raises(SystemExit) as exc:
+            get_cc_bootstrap("env-x", "lkc-y")
+        assert exc.value.code == 1
+
 
 # ---------------------------------------------------------------------------
 # resolve_api_credentials
@@ -141,6 +148,13 @@ class TestResolveApiCredentials:
              pytest.raises(SystemExit) as exc:
             resolve_api_credentials({})
         assert exc.value.code == 1
+
+    def test_only_secret_falls_back_to_config(self, monkeypatch):
+        monkeypatch.setenv("CC_API_KEY", "env-key")
+        monkeypatch.delenv("CC_API_SECRET", raising=False)
+        key, secret = resolve_api_credentials({"cc_api_secret": "cfg-secret"})
+        assert key == "env-key"
+        assert secret == "cfg-secret"
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +263,15 @@ class TestEnsurePlugin:
         out = capsys.readouterr().out
         assert "--auto-install" in out
 
+    def test_found_in_subdirectory(self, tmp_path, capsys):
+        sub = tmp_path / "confluentinc-kafka-connect-replicator-7.5.1" / "lib"
+        sub.mkdir(parents=True)
+        jar = sub / "kafka-connect-replicator-7.5.1.jar"
+        jar.write_bytes(b"")
+        ensure_plugin(str(tmp_path), auto_install=False)
+        out = capsys.readouterr().out
+        assert "found" in out
+
 
 # ---------------------------------------------------------------------------
 # write_start_script
@@ -350,3 +373,44 @@ class TestMain:
         main(["--config", conf, "--out-dir", out_dir])
         out = capsys.readouterr().out
         assert "sn-confluent replicate" in out
+
+    @patch("sn_confluent.worker.main.check_confluent_cli")
+    @patch("sn_confluent.worker.main.get_cc_bootstrap", return_value="host:9092")
+    @patch("sn_confluent.worker.main.resolve_api_credentials", return_value=("K", "S"))
+    @patch("sn_confluent.worker.main.ensure_plugin")
+    def test_kafka_home_flag_in_script(
+        self, mock_plugin, mock_creds, mock_bootstrap, mock_cli, tmp_path
+    ):
+        conf = self._make_conf(tmp_path)
+        out_dir = str(tmp_path / "out")
+        main(["--config", conf, "--out-dir", out_dir, "--kafka-home", "/custom/confluent"])
+        script = open(os.path.join(out_dir, "start-worker.sh")).read()
+        assert "/custom/confluent" in script
+
+    @patch("sn_confluent.worker.main.check_confluent_cli")
+    @patch("sn_confluent.worker.main.get_cc_bootstrap", return_value="host:9092")
+    @patch("sn_confluent.worker.main.resolve_api_credentials", return_value=("K", "S"))
+    @patch("sn_confluent.worker.main.ensure_plugin")
+    def test_out_dir_from_config(
+        self, mock_plugin, mock_creds, mock_bootstrap, mock_cli, tmp_path
+    ):
+        conf_content = MINIMAL_CONF + f"out_dir = {tmp_path / 'from-config'}\n"
+        conf = _write_conf(tmp_path, conf_content)
+        main(["--config", conf])
+        assert os.path.exists(tmp_path / "from-config" / "connect-worker.properties")
+
+    @patch("sn_confluent.worker.main.check_confluent_cli")
+    @patch("sn_confluent.worker.main.get_cc_bootstrap", return_value="host:9092")
+    @patch("sn_confluent.worker.main.resolve_api_credentials", return_value=("K", "S"))
+    @patch("sn_confluent.worker.main.ensure_plugin")
+    def test_auto_install_flag_forwarded(
+        self, mock_plugin, mock_creds, mock_bootstrap, mock_cli, tmp_path
+    ):
+        conf = self._make_conf(tmp_path)
+        out_dir = str(tmp_path / "out")
+        main(["--config", conf, "--out-dir", out_dir, "--auto-install"])
+        mock_plugin.assert_called_once()
+        args_positional = mock_plugin.call_args[0]
+        args_keyword = mock_plugin.call_args[1]
+        auto_install_val = args_keyword.get("auto_install") if "auto_install" in args_keyword else args_positional[1]
+        assert auto_install_val is True
