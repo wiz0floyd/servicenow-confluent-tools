@@ -230,19 +230,21 @@ class TestEnsurePlugin:
     def test_found_prints_and_returns(self, tmp_path, capsys):
         jar = tmp_path / "kafka-connect-replicator-1.0.jar"
         jar.write_bytes(b"")
-        ensure_plugin(str(tmp_path), auto_install=False)
+        result = ensure_plugin(str(tmp_path), auto_install=False)
         out = capsys.readouterr().out
         assert "found" in out
+        assert result is True
 
     @patch("sn_confluent.worker.main.shutil.which", return_value="/usr/bin/confluent-hub")
     @patch("sn_confluent.worker.main.subprocess.run")
     def test_auto_install_calls_confluent_hub(self, mock_run, mock_which, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
-        ensure_plugin(str(tmp_path), auto_install=True)
+        result = ensure_plugin(str(tmp_path), auto_install=True)
         assert mock_run.called
         cmd = mock_run.call_args[0][0]
         assert "confluent-hub" in cmd
         assert "confluentinc/kafka-connect-replicator:latest" in cmd
+        assert result is True
 
     @patch("sn_confluent.worker.main.shutil.which", return_value="/usr/bin/confluent-hub")
     @patch("sn_confluent.worker.main.subprocess.run", return_value=MagicMock(returncode=1))
@@ -253,15 +255,17 @@ class TestEnsurePlugin:
 
     @patch("sn_confluent.worker.main.shutil.which", return_value=None)
     def test_no_hub_prints_instructions(self, mock_which, tmp_path, capsys):
-        ensure_plugin(str(tmp_path), auto_install=False)
+        result = ensure_plugin(str(tmp_path), auto_install=False)
         out = capsys.readouterr().out
         assert "confluent.io" in out or "confluent-hub" in out
+        assert result is False
 
     @patch("sn_confluent.worker.main.shutil.which", return_value="/usr/bin/confluent-hub")
     def test_hub_available_no_auto_prints_hint(self, mock_which, tmp_path, capsys):
-        ensure_plugin(str(tmp_path), auto_install=False)
+        result = ensure_plugin(str(tmp_path), auto_install=False)
         out = capsys.readouterr().out
         assert "--auto-install" in out
+        assert result is False
 
     def test_found_in_subdirectory(self, tmp_path, capsys):
         sub = tmp_path / "confluentinc-kafka-connect-replicator-7.5.1" / "lib"
@@ -410,7 +414,19 @@ class TestMain:
         out_dir = str(tmp_path / "out")
         main(["--config", conf, "--out-dir", out_dir, "--auto-install"])
         mock_plugin.assert_called_once()
-        args_positional = mock_plugin.call_args[0]
-        args_keyword = mock_plugin.call_args[1]
-        auto_install_val = args_keyword.get("auto_install") if "auto_install" in args_keyword else args_positional[1]
-        assert auto_install_val is True
+        assert mock_plugin.call_args.args[1] is True
+
+    @patch("sn_confluent.worker.main.check_confluent_cli")
+    @patch("sn_confluent.worker.main.get_cc_bootstrap", return_value="host:9092")
+    @patch("sn_confluent.worker.main.resolve_api_credentials", return_value=("K", "S"))
+    @patch("sn_confluent.worker.main.ensure_plugin", return_value=False)
+    def test_plugin_missing_prints_warning(
+        self, mock_plugin, mock_creds, mock_bootstrap, mock_cli, tmp_path, capsys
+    ):
+        conf = self._make_conf(tmp_path)
+        out_dir = str(tmp_path / "out")
+        rc = main(["--config", conf, "--out-dir", out_dir])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Warning" in err
+        assert "plugin" in err.lower()

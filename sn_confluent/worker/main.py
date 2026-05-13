@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import List, Optional
 
 from sn_confluent.core.pem import check_confluent_cli
@@ -100,13 +101,17 @@ def _plugin_present(plugin_dir: str) -> bool:
     return bool(glob.glob(pattern, recursive=True))
 
 
-def ensure_plugin(plugin_dir: str, auto_install: bool, config_path: str = "worker.conf") -> None:
-    """Verify Replicator plugin is installed, or install / print instructions."""
+def ensure_plugin(plugin_dir: str, auto_install: bool, config_path: str = "worker.conf") -> bool:
+    """Verify Replicator plugin is installed, or install / print instructions.
+
+    Returns True if the plugin is confirmed present, False if instructions were
+    printed but the plugin was not installed (worker will fail at runtime).
+    """
     abs_dir = os.path.abspath(plugin_dir)
 
     if _plugin_present(abs_dir):
         print(f"Replicator plugin found in {abs_dir}.")
-        return
+        return True
 
     if shutil.which("confluent-hub") is not None:
         if auto_install:
@@ -125,6 +130,7 @@ def ensure_plugin(plugin_dir: str, auto_install: bool, config_path: str = "worke
                 print("Error: confluent-hub install failed.", file=sys.stderr)
                 sys.exit(1)
             print("Replicator plugin installed.")
+            return True
         else:
             print(
                 f"Replicator plugin not found in {abs_dir}.\n"
@@ -132,6 +138,7 @@ def ensure_plugin(plugin_dir: str, auto_install: bool, config_path: str = "worke
                 f"  confluent-hub install confluentinc/kafka-connect-replicator:latest "
                 f"--component-dir {abs_dir}"
             )
+            return False
     else:
         print(
             PLUGIN_INSTALL_INSTRUCTIONS.format(
@@ -139,6 +146,7 @@ def ensure_plugin(plugin_dir: str, auto_install: bool, config_path: str = "worke
                 config=config_path,
             )
         )
+        return False
 
 
 def generate_worker_properties(
@@ -289,7 +297,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     api_key, api_secret = resolve_api_credentials(cfg)
 
     # 6. Check / install Replicator plugin
-    ensure_plugin(plugin_dir, args.auto_install, config_path=args.config)
+    plugin_ok = ensure_plugin(plugin_dir, args.auto_install, config_path=args.config)
+    if not plugin_ok:
+        print(
+            "Warning: Replicator plugin not verified. The worker will fail to start until it is installed.",
+            file=sys.stderr,
+        )
 
     # 7. Generate properties
     props_content = generate_worker_properties(
@@ -302,11 +315,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"\n--- {props_filename} ---")
         print(props_content)
         print(f"\n--- start-worker.sh ---")
-        # Show script inline
-        abs_plugin_dir = os.path.abspath(plugin_dir)
-        print(f"#!/usr/bin/env bash")
-        print(f'exec "{kafka_home}/bin/connect-distributed" "./{props_filename}"')
-        print("\n(dry-run: no files written)")
+        with tempfile.TemporaryDirectory() as td:
+            real_script = open(write_start_script(td, props_filename, kafka_home)).read()
+        print(real_script)
+        print("(dry-run: no files written)")
         return 0
 
     # 9. Write files
