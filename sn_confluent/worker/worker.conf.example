@@ -1,0 +1,20 @@
+# Connect worker configuration for sn-confluent worker
+# Copy to worker.conf and fill in your values. worker.conf is gitignored.
+# Keys in this file overlap with link.conf — both use the [confluent] section,
+# so you can point --config at your existing link.conf.
+
+[confluent]
+# Required
+environment_id = env-xxxxxx
+cluster_id     = lkc-xxxxxx
+
+# CC API credentials for the worker's backing cluster auth.
+# Prefer CC_API_KEY / CC_API_SECRET env vars over storing credentials here.
+# cc_api_key    =
+# cc_api_secret =
+
+# Optional — defaults shown
+# plugin_dir    = ./plugins        # directory where Replicator jar lives / will be installed
+# rest_port     = 8083             # Connect REST API port
+# group_id      = connect-cluster  # distributed worker group ID
+# out_dir       = .                # where to write generated files

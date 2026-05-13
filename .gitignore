@@ -13,8 +13,9 @@ truststore
 # Confluent properties files (may contain inline certs/keys)
 *.properties
 
-# Real config with live IDs — use link.conf.example as template
+# Real config with live IDs — use *.conf.example as template
 link.conf
+worker.conf
 local/
 
 # Python

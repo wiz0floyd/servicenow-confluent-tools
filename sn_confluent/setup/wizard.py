@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
-STEP_NAMES = ("extract", "link", "mirror", "replicate")
+STEP_NAMES = ("extract", "link", "mirror", "worker", "replicate")
 
 
 @dataclass
@@ -35,6 +35,8 @@ def _import_step(name: str) -> Callable[[Optional[List[str]]], int]:
         from sn_confluent.link.main import main
     elif name == "mirror":
         from sn_confluent.mirror.main import main
+    elif name == "worker":
+        from sn_confluent.worker.main import main
     elif name == "replicate":
         from sn_confluent.replicate.main import main
     else:
@@ -49,6 +51,8 @@ def _build_argv(step: str, state: WizardState) -> List[str]:
             "--truststore", state.truststore,
             "--out-dir", state.pem_dir,
         ]
+    if step == "worker":
+        return ["--config", state.link_conf, "--out-dir", state.pem_dir]
     common = ["--config", state.link_conf, "--pem-dir", state.pem_dir]
     return common  # link/mirror/replicate all take the same shared flags
 
