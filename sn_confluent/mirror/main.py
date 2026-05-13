@@ -116,7 +116,7 @@ def build_mirror_filters(
     exclude_prefixes: list = None,
     include_topics: list = None,
     exclude_topics: list = None,
-) -> str | None:
+) -> Optional[str]:
     """Build the auto.create.mirror.topics.filters JSON value, or None if no filters given."""
     entries = []
     for name in (include_prefixes or []):
