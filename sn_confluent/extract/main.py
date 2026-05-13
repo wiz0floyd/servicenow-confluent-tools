@@ -103,7 +103,7 @@ def set_key_permissions(path: str) -> None:
         )
 
 
-def _resolve_key_password() -> str | None:
+def _resolve_key_password() -> Optional[str]:
     """Return the key encryption password from env var or interactive prompt."""
     pw = os.environ.get("KEY_PASSWORD")
     if pw is not None:

@@ -56,7 +56,7 @@ def load_config(path: str) -> dict:
     return result
 
 
-def resolve_key_password(client_key_bytes: bytes) -> str | None:
+def resolve_key_password(client_key_bytes: bytes) -> Optional[str]:
     """Resolve the private key password from env var or interactive prompt."""
     env_pw = os.environ.get("KEY_PASSWORD")
     if env_pw is not None:
@@ -119,7 +119,7 @@ def list_sn_topics(
     ca_pem_bytes: bytes,
     client_cert_bytes: bytes,
     client_key_bytes: bytes,
-    key_password: str | None,
+    key_password: Optional[str],
 ) -> list[str]:
     """List topics on SN Hermes via kafka-python AdminClient."""
     try:
@@ -156,7 +156,7 @@ def list_sn_topics(
     return sorted(t for t in raw if not t.startswith("__") and not t.startswith("_confluent"))
 
 
-def build_topic_regex(topics: list[str] | None, use_all: bool) -> str:
+def build_topic_regex(topics: Optional[List[str]], use_all: bool) -> str:
     """Build topic.regex from selected topics or --all flag."""
     if use_all:
         return "(?!__)(?!_confluent).+"
@@ -178,7 +178,7 @@ def build_cc_to_sn_config(
     ca_pem: bytes,
     client_cert: bytes,
     client_key: bytes,
-    key_password: str | None,
+    key_password: Optional[str],
     group_id: str,
     topic_regex: str,
     topic_rename_format: str,
@@ -213,7 +213,7 @@ def build_sn_to_cc_configs(
     ca_pem: bytes,
     client_cert: bytes,
     client_key: bytes,
-    key_password: str | None,
+    key_password: Optional[str],
     group_id: str,
     topic_regex: str,
     topic_rename_format: str,
