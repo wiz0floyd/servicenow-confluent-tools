@@ -44,6 +44,25 @@ def _resolve_key_password() -> Optional[str]:
     return entered or None
 
 
+def warn_no_key_password() -> None:
+    """Print a loud security warning when no key encryption password is provided."""
+    border = "#" * 72
+    lines = [
+        border,
+        "#  SECURITY WARNING: No key encryption password provided.              #",
+        "#                                                                      #",
+        "#  The private key will be stored unencrypted in Confluent Cloud       #",
+        "#  cluster link configuration and is retrievable by any operator       #",
+        "#  with environment-level access.                                      #",
+        "#                                                                      #",
+        "#  A key encryption password SHALL be used in all production           #",
+        "#  environments. Set KEY_PASSWORD in your environment or provide       #",
+        "#  a password at the prompt.                                           #",
+        border,
+    ]
+    print("\n".join(lines), file=sys.stderr)
+
+
 def sn_bootstrap(host: str, base_port: int, brokers_per_cluster: int = SN_BROKERS_PER_CLUSTER) -> str:
     """Build a bootstrap string for one ServiceNow source cluster."""
     return ",".join(f"{host}:{base_port + i}" for i in range(brokers_per_cluster))
@@ -245,6 +264,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     cfg = load_config(args.config)
     ca_pem, client_cert, client_key = load_pem_files(args.pem_dir)
     key_password = _resolve_key_password()
+    if key_password is None:
+        warn_no_key_password()
 
     if args.copy_config:
         ssl_props = build_ssl_properties(ca_pem, client_cert, client_key,

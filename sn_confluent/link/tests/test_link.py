@@ -537,3 +537,75 @@ def test_resolve_key_password_env_var_skips_prompt(monkeypatch):
     monkeypatch.setenv("KEY_PASSWORD", "env-secret")
     monkeypatch.setattr("getpass.getpass", lambda _prompt: (_ for _ in ()).throw(AssertionError("getpass must not be called when env var is set")))
     assert _resolve_key_password() == "env-secret"
+
+
+# ---------------------------------------------------------------------------
+# warn_no_key_password
+# ---------------------------------------------------------------------------
+
+def test_warn_no_key_password_prints_to_stderr(capsys):
+    from sn_confluent.link.main import warn_no_key_password
+    warn_no_key_password()
+    err = capsys.readouterr().err
+    assert "SECURITY WARNING" in err
+    assert "SHALL" in err
+    assert "production" in err
+
+
+def test_main_warns_when_no_key_password(tmp_path, capsys):
+    from sn_confluent.link.main import main
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id   = env-abc123
+        cluster_id       = lkc-abc123
+        link_name        = my-link
+        source_bootstrap = broker.example.com:9093
+    """)
+    (tmp_path / "link.conf").write_text(cfg_text)
+    (tmp_path / "ca.pem").write_bytes(b"CA")
+    (tmp_path / "client-cert.pem").write_bytes(b"CERT")
+    (tmp_path / "client-key.pem").write_bytes(b"KEY")
+
+    with patch("sys.argv", [
+        "create_link.py",
+        "--config", str(tmp_path / "link.conf"),
+        "--pem-dir", str(tmp_path),
+        "--dry-run",
+    ]):
+        with patch("sn_confluent.link.main._resolve_key_password", return_value=None):
+            with patch("sn_confluent.link.main.check_confluent_cli"):
+                with patch("sn_confluent.link.main.check_auth"):
+                    main()
+
+    err = capsys.readouterr().err
+    assert "SECURITY WARNING" in err
+    assert "SHALL" in err
+
+
+def test_main_no_warn_when_key_password_set(tmp_path, capsys):
+    from sn_confluent.link.main import main
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id   = env-abc123
+        cluster_id       = lkc-abc123
+        link_name        = my-link
+        source_bootstrap = broker.example.com:9093
+    """)
+    (tmp_path / "link.conf").write_text(cfg_text)
+    (tmp_path / "ca.pem").write_bytes(b"CA")
+    (tmp_path / "client-cert.pem").write_bytes(b"CERT")
+    (tmp_path / "client-key.pem").write_bytes(b"KEY")
+
+    with patch("sys.argv", [
+        "create_link.py",
+        "--config", str(tmp_path / "link.conf"),
+        "--pem-dir", str(tmp_path),
+        "--dry-run",
+    ]):
+        with patch("sn_confluent.link.main._resolve_key_password", return_value="s3cr3t"):
+            with patch("sn_confluent.link.main.check_confluent_cli"):
+                with patch("sn_confluent.link.main.check_auth"):
+                    main()
+
+    err = capsys.readouterr().err
+    assert "SECURITY WARNING" not in err
