@@ -58,7 +58,7 @@ python create_link.py --pem-dir /path/to/pems
 | `--copy-config` | off | Copy SSL properties to clipboard for pasting into the web console |
 | `--literal-newlines` | off | Use actual newlines in PEM values instead of `\n` escapes |
 
-If your private key is encrypted, set `KEY_PASSWORD` before running (non-interactive) or omit it to be prompted:
+Set `KEY_PASSWORD` before running (non-interactive) or omit it to be prompted. **Omitting a key password in a production environment is a security risk** — the private key is stored unencrypted in Confluent Cloud cluster link configuration where any operator with environment access can retrieve it. A prominent warning is printed to stderr when no password is provided.
 
 ```bash
 KEY_PASSWORD=yourpassword sn-confluent link
