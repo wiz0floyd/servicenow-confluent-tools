@@ -1,0 +1,44 @@
+[confluent]
+# Confluent Cloud environment and cluster
+environment_id = env-xxxxx
+cluster_id = lkc-xxxxx
+
+# Name for this connector instance
+connector_name = hermes-sink-prod
+
+# Plugin ID from a prior upload — leave blank to upload on first run.
+# After uploading, paste the returned ccp-xxxxx value here to skip future uploads.
+plugin_id =
+
+# Confluent Cloud topic(s) the connector reads from (comma-separated)
+topics = my-topic
+
+# ServiceNow Hermes settings
+instance_name = myinstance
+hermes_topic = snc.myinstance.sn_streamconnect.my-topic
+
+# mTLS keystores from Instance PKI Certificate Generator.
+# Use either _path (we base64-encode the file) or _b64 (already encoded).
+keystore_path = /path/to/keystore.p12
+keystore_password = changeit
+truststore_path = /path/to/truststore.p12
+truststore_password = changeit
+
+# Confluent Cloud API key and secret for the connector to authenticate to the cluster.
+# Alternatively set CC_API_KEY / CC_API_SECRET env vars (preferred for secrets).
+kafka_api_key =
+kafka_api_secret =
+
+# ---- Optional ----
+
+# Cloud provider for plugin upload: aws (default), gcp, azure
+# cloud = aws
+
+# Number of connector tasks (default: 1)
+# tasks_max = 1
+
+# Explicit path to the connector ZIP (auto-detected in sibling repo by default)
+# plugin_file = ../ServiceNow-source-and-sink-connector/target/components/packages/servicenow-hermes-kafka-connector-0.1.0.zip
+
+# Name for the uploaded plugin (default: <connector_name>-plugin)
+# plugin_name = hermes-sink-plugin
