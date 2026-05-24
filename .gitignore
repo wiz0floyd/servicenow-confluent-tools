@@ -16,7 +16,12 @@ truststore
 # Real config with live IDs — use *.conf.example as template
 link.conf
 worker.conf
+deploy.conf
 local/
+
+# Keystore/truststore downloads (with or without numeric suffix)
+keystore*
+truststore*
 
 # Python
 __pycache__/

@@ -17,6 +17,8 @@ SUBCOMMAND_HELP = {
     "mirror": "Mirror ServiceNow Kafka topics to Confluent Cloud",
     "worker": "Generate Connect worker config and start script for Replicator",
     "replicate": "Deploy a Confluent Replicator connector",
+    "deploy": "Deploy the ServiceNow Hermes Kafka Connector to Confluent Cloud",
+    "api-key": "Create, list, or delete Confluent Cloud Kafka API keys",
     "setup": "Guided end-to-end setup wizard",
 }
 
@@ -32,6 +34,10 @@ def _load_subcommand(name: str) -> Callable[[Optional[List[str]]], int]:
         from sn_confluent.worker.main import main
     elif name == "replicate":
         from sn_confluent.replicate.main import main
+    elif name == "deploy":
+        from sn_confluent.deploy.main import main
+    elif name == "api-key":
+        from sn_confluent.api_key.main import main
     elif name == "setup":
         from sn_confluent.setup.wizard import main
     else:
