@@ -347,9 +347,10 @@ def build_sink_config(
         "hermes.ssl.keystore.password": keystore_password,
         "hermes.ssl.truststore.b64": truststore_b64,
         "hermes.ssl.truststore.password": truststore_password,
-        "confluent.custom.connection.endpoints": ",".join(
-            f"{instance_name if '.' in instance_name else instance_name + '.service-now.com'}:{p}"
-            for p in range(4000, 4008)
+        "confluent.custom.connection.endpoints": (
+            (instance_name if "." in instance_name else instance_name + ".service-now.com")
+            + ":"
+            + ",".join(str(p) for p in range(4000, 4008))
         ),
     }
 
@@ -389,10 +390,14 @@ def build_source_config(
         "hermes.ssl.keystore.password": keystore_password,
         "hermes.ssl.truststore.b64": truststore_b64,
         "hermes.ssl.truststore.password": truststore_password,
-        "confluent.custom.connection.endpoints": endpoints or ",".join(
-            f"{instance_name if '.' in instance_name else instance_name + '.service-now.com'}:{base + i}"
-            for base in SN_SOURCE_CLUSTERS
-            for i in range(SN_BROKERS_PER_CLUSTER)
+        "confluent.custom.connection.endpoints": endpoints or (
+            (instance_name if "." in instance_name else instance_name + ".service-now.com")
+            + ":"
+            + ",".join(
+                str(base + i)
+                for base in SN_SOURCE_CLUSTERS
+                for i in range(SN_BROKERS_PER_CLUSTER)
+            )
         ),
     }
 
