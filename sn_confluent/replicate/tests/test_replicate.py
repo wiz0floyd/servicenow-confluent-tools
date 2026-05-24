@@ -222,7 +222,7 @@ def test_source_clusters_default(tmp):
 # =========================================================================
 
 
-@patch("sn_confluent.replicate.main.subprocess.run")
+@patch("sn_confluent.core.confluent.subprocess.run")
 def test_list_cc_topics(mock_run):
     mock_run.return_value = MagicMock(
         returncode=0,
@@ -237,27 +237,25 @@ def test_list_cc_topics(mock_run):
     mock_run.assert_called_once()
 
 
-@patch("sn_confluent.replicate.main.subprocess.run")
+@patch("sn_confluent.core.confluent.subprocess.run")
 def test_list_cc_topics_failure_exits(mock_run):
     mock_run.return_value = MagicMock(returncode=1, stderr="oops")
     with pytest.raises(SystemExit):
         sr.list_cc_topics("env-1", "lkc-1")
 
 
-@patch("sn_confluent.replicate.main.KafkaAdminClient", create=True)
-def test_list_sn_topics(_unused):
-    """Mock KafkaAdminClient at the import location inside list_sn_topics."""
+def test_hermes_client_list_topics_from_source_cluster():
+    """HermesClient.list_topics with a source-cluster base_port."""
     mock_admin_instance = MagicMock()
     mock_admin_instance.list_topics.return_value = [
         "topicB", "__consumer_offsets", "topicA", "_confluent-metrics",
     ]
-    mock_admin_cls = MagicMock(return_value=mock_admin_instance)
-
-    with patch.dict("sys.modules", {"kafka": MagicMock(), "kafka.admin": MagicMock(KafkaAdminClient=mock_admin_cls)}):
-        result = sr.list_sn_topics(
-            "host", [4100], 4,
-            FAKE_CA, FAKE_CERT, FAKE_KEY, None,
-        )
+    with patch.dict("sys.modules", {
+        "kafka": MagicMock(),
+        "kafka.admin": MagicMock(KafkaAdminClient=MagicMock(return_value=mock_admin_instance)),
+    }):
+        from sn_confluent.core.hermes import HermesClient
+        result = HermesClient("host", FAKE_CA, FAKE_CERT, FAKE_KEY).list_topics(base_port=4100)
     assert result == ["topicA", "topicB"]
 
 

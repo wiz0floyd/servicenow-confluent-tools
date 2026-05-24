@@ -20,6 +20,8 @@ from sn_confluent.core.pem import (
     check_confluent_cli, load_pem_files,
 )
 from sn_confluent.core.config import load_config as _core_load_config
+from sn_confluent.core.confluent import list_cc_topics as _list_cc_topics
+from sn_confluent.core.hermes import HermesClient
 
 SN_INBOUND_PORT = 4000
 
@@ -90,70 +92,12 @@ def get_cc_bootstrap(environment_id: str, cluster_id: str) -> str:
 
 
 def list_cc_topics(environment_id: str, cluster_id: str) -> list[str]:
-    """List topics on the CC cluster via confluent CLI."""
-    result = subprocess.run(
-        [
-            "confluent", "kafka", "topic", "list",
-            "--cluster", cluster_id,
-            "--environment", environment_id,
-            "--output", "json",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        print(f"Error: Failed to list CC topics: {result.stderr.strip()}", file=sys.stderr)
+    """List CC topics, exiting on failure."""
+    result = _list_cc_topics(environment_id, cluster_id)
+    if result is None:
+        print("Error: Failed to list CC topics.", file=sys.stderr)
         sys.exit(1)
-    try:
-        topics = json.loads(result.stdout)
-        return sorted(t["name"] for t in topics)
-    except (json.JSONDecodeError, KeyError) as exc:
-        print(f"Error: Unexpected topic list output: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-
-def list_sn_topics(
-    source_host: str,
-    source_clusters: list[int],
-    brokers_per_cluster: int,
-    ca_pem_bytes: bytes,
-    client_cert_bytes: bytes,
-    client_key_bytes: bytes,
-    key_password: Optional[str],
-) -> list[str]:
-    """List topics on SN Hermes via kafka-python AdminClient."""
-    try:
-        from kafka.admin import KafkaAdminClient
-    except ImportError:
-        print(
-            "Error: kafka-python is required for SN topic listing.\n"
-            "Install it: pip install kafka-python",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    base_port = source_clusters[0]
-    bootstrap = ",".join(
-        f"{source_host}:{base_port + i}" for i in range(brokers_per_cluster)
-    )
-    ssl_context_kwargs = {
-        "bootstrap_servers": bootstrap,
-        "security_protocol": "SSL",
-        "ssl_cafile_data": ca_pem_bytes.decode("utf-8"),
-        "ssl_certfile_data": client_cert_bytes.decode("utf-8"),
-        "ssl_keyfile_data": client_key_bytes.decode("utf-8"),
-    }
-    if key_password:
-        ssl_context_kwargs["ssl_password"] = key_password
-    try:
-        admin = KafkaAdminClient(**ssl_context_kwargs)
-        raw = admin.list_topics()
-        admin.close()
-    except Exception as exc:
-        print(f"Error: Failed to list SN topics: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    return sorted(t for t in raw if not t.startswith("__") and not t.startswith("_confluent"))
+    return result
 
 
 def build_topic_regex(topics: Optional[List[str]], use_all: bool) -> str:
@@ -461,10 +405,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                 available = list_cc_topics(cfg["environment_id"], cfg["cluster_id"])
             else:
                 print("Fetching topics from SN Hermes...")
-                available = list_sn_topics(
-                    source_host, source_clusters, brokers_per_cluster,
-                    ca_pem, client_cert, client_key, key_password,
+                client = HermesClient(
+                    source_host, ca_pem, client_cert, client_key, key_password,
+                    brokers_per_cluster=brokers_per_cluster,
                 )
+                available = client.list_topics(base_port=source_clusters[0])
+                if available is None:
+                    print("Error: Failed to list SN topics.", file=sys.stderr)
+                    sys.exit(1)
 
             if not available:
                 print("No topics found on source cluster.")
