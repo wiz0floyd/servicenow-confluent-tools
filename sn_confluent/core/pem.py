@@ -32,6 +32,64 @@ def check_confluent_cli() -> None:
         sys.exit(1)
 
 
+def ensure_authenticated(cfg: dict) -> None:
+    """Ensure the Confluent CLI is installed and authenticated.
+
+    Resolution order:
+    1. Cloud API key — if cloud_api_key/cloud_api_secret are present in cfg
+       (or CC_CLOUD_API_KEY/CC_CLOUD_API_SECRET env vars), log in with them
+       non-interactively. Best for automation; tokens never expire.
+    2. Saved credentials — if a prior `confluent login --save` stored a
+       DPAPI-encrypted password, the CLI re-authenticates silently on Windows
+       without a browser prompt. Tried automatically when no API key is set.
+    3. Manual — if neither works, the user must run `confluent login`.
+    """
+    if shutil.which("confluent") is None:
+        print(CONFLUENT_INSTALL)
+        sys.exit(1)
+
+    cloud_key = (
+        os.environ.get("CC_CLOUD_API_KEY", "").strip()
+        or cfg.get("cloud_api_key", "").strip()
+    )
+    cloud_secret = (
+        os.environ.get("CC_CLOUD_API_SECRET", "").strip()
+        or cfg.get("cloud_api_secret", "").strip()
+    )
+
+    if cloud_key and cloud_secret:
+        # Cloud API keys are consumed via env vars — the CLI picks them up
+        # automatically and skips the SSO session requirement entirely.
+        os.environ["CONFLUENT_CLOUD_API_KEY"] = cloud_key
+        os.environ["CONFLUENT_CLOUD_API_SECRET"] = cloud_secret
+        return
+
+    # No API key — check if already authenticated; if not, try to refresh
+    # from the DPAPI-encrypted saved credentials (Windows silent re-auth).
+    probe = subprocess.run(
+        ["confluent", "whoami"],
+        capture_output=True,
+        text=True,
+    )
+    if probe.returncode == 0:
+        return  # already authenticated
+
+    print("Confluent CLI session expired — attempting re-login with saved credentials...")
+    relogin = subprocess.run(
+        ["confluent", "login", "--save"],
+        capture_output=True,
+        text=True,
+    )
+    if relogin.returncode != 0:
+        print(
+            "Error: Confluent CLI is not authenticated and re-login failed.\n"
+            "Run: confluent login --save\n"
+            "Or add cloud_api_key / cloud_api_secret to deploy.conf for non-interactive auth.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def check_auth(environment_id: str, cluster_id: str) -> None:
     """Verify Confluent CLI auth by describing the destination cluster."""
     result = subprocess.run(
@@ -78,6 +136,7 @@ __all__ = [
     "SN_BROKERS_PER_CLUSTER",
     "CONFLUENT_INSTALL",
     "check_confluent_cli",
+    "ensure_authenticated",
     "check_auth",
     "load_pem_files",
 ]

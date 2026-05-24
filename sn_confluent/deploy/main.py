@@ -16,7 +16,7 @@ import tempfile
 import time
 from typing import List, Optional, Tuple
 
-from sn_confluent.core.pem import check_confluent_cli
+from sn_confluent.core.pem import check_confluent_cli, ensure_authenticated
 from sn_confluent.core.config import load_config as _core_load_config
 
 CONNECTOR_CLASS = "com.servicenow.kafka.connect.hermes.HermesSinkConnector"
@@ -384,7 +384,7 @@ def build_connector_config(
         "hermes.ssl.truststore.password": truststore_password,
         "confluent.custom.connection.endpoints": (
             f"{instance_name}.service-now.com:"
-            + ",".join(str(p) for p in range(4000, 4051))
+            + ",".join(str(p) for p in range(4000, 4008))
         ),
     }
 
@@ -454,12 +454,18 @@ def poll_connector(
 
         try:
             data = json.loads(result.stdout)
-            # Confluent CLI nests status differently across versions; try both shapes
-            state = (
-                data.get("status", {}).get("state")
-                or data.get("connector", {}).get("status", {}).get("state")
-                or "UNKNOWN"
-            ).upper()
+            # CLI v4.x returns {"connector": {"status": "RUNNING", ...}}
+            # Older versions returned {"status": {"state": "RUNNING"}}
+            raw = (
+                data.get("connector", {}).get("status")
+                or data.get("status")
+            )
+            if isinstance(raw, str):
+                state = raw.upper()
+            elif isinstance(raw, dict):
+                state = raw.get("state", "UNKNOWN").upper()
+            else:
+                state = "UNKNOWN"
         except (json.JSONDecodeError, AttributeError):
             state = "UNKNOWN"
 
@@ -614,7 +620,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     cfg = load_config(args.config)
 
     # 2. Check confluent CLI is on PATH and authenticated
-    check_confluent_cli()
+    ensure_authenticated(cfg)
 
     environment_id = cfg["environment_id"]
     cluster_id = cfg["cluster_id"]

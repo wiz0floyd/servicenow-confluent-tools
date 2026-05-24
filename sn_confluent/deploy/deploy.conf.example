@@ -29,6 +29,13 @@ truststore_password = changeit
 kafka_api_key =
 kafka_api_secret =
 
+# Cloud-level API key for the Confluent CLI itself (separate from the Kafka cluster key above).
+# Create one at: Confluent Cloud → Hamburger menu → Cloud API keys → + Add API key → Granular access
+# When set, the deploy tool auto-logs in non-interactively — no `confluent login` required.
+# Alternatively set CC_CLOUD_API_KEY / CC_CLOUD_API_SECRET env vars.
+cloud_api_key =
+cloud_api_secret =
+
 # ---- Optional ----
 
 # Cloud provider for plugin upload: aws (default), gcp, azure
