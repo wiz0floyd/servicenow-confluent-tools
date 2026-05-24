@@ -407,6 +407,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print("Fetching topics from SN Hermes...")
                 client = HermesClient(
                     source_host, ca_pem, client_cert, client_key, key_password,
+                    brokers_per_cluster=brokers_per_cluster,
                 )
                 available = client.list_topics(base_port=source_clusters[0])
                 if available is None:

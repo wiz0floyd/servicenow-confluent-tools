@@ -63,12 +63,12 @@ In the Confluent Cloud Console:
 
 SOURCE_EGRESS_NOTE = """\
 Action required — configure Confluent Cloud egress endpoints for two Hermes clusters:
-  {instance}.service-now.com:4100-4107
-  {instance}.service-now.com:4200-4207
+  {instance}.service-now.com:4100-4103
+  {instance}.service-now.com:4200-4203
 
 In the Confluent Cloud Console:
   Connectors > {connector} > Networking > Add egress endpoint
-"""  # TODO: verify port ranges per cluster
+"""
 
 
 def load_config(path: str) -> dict:
@@ -390,9 +390,9 @@ def build_source_config(
         "hermes.ssl.truststore.b64": truststore_b64,
         "hermes.ssl.truststore.password": truststore_password,
         "confluent.custom.connection.endpoints": endpoints or ",".join(
-            f"{instance_name}.service-now.com:"
-            + ",".join(str(base + i) for i in range(SN_BROKERS_PER_CLUSTER))
+            f"{instance_name if '.' in instance_name else instance_name + '.service-now.com'}:{base + i}"
             for base in SN_SOURCE_CLUSTERS
+            for i in range(SN_BROKERS_PER_CLUSTER)
         ),
     }
 
@@ -671,13 +671,15 @@ def _run_source_wizard(cfg: dict, missing: set) -> dict:
     if "truststore_password" in missing:
         cfg["truststore_password"] = questionary.password("Truststore password:").ask()
 
-    # Hermes source topic picker — source reads FROM Hermes
+    # Hermes source topic picker — source reads FROM Hermes (source-peer clusters at 4100+)
     if "hermes_topic" in missing:
         instance_name = cfg.get("instance_name", "")
         hermes_pem = _resolve_hermes_pem(cfg, cfg.get("_pem_dir"))
         if hermes_pem and instance_name:
             print(f"Fetching topics from Hermes ({instance_name}.service-now.com)...")
-            hermes_topics = HermesClient(instance_name, *hermes_pem).list_topics()
+            hermes_topics = HermesClient(instance_name, *hermes_pem).list_topics(
+                base_port=SN_SOURCE_CLUSTERS[0]
+            )
         else:
             hermes_topics = None
 
@@ -728,7 +730,7 @@ def _sink_main(argv: Optional[List[str]] = None) -> int:
     cluster_id = cfg["cluster_id"]
     connector_name = cfg["connector_name"]
     cloud = args.cloud or cfg.get("cloud", "aws").strip() or "aws"
-    tasks_max = int(cfg.get("tasks_max", "1") or "1")
+    tasks_max = max(1, int(cfg.get("tasks_max", "1") or "1"))
 
     # 3. Resolve plugin ID (upload if not already known)
     plugin_id = args.plugin_id or cfg.get("plugin_id", "").strip()
@@ -905,7 +907,7 @@ def _source_main(argv: Optional[List[str]] = None) -> int:
     cluster_id = cfg["cluster_id"]
     connector_name = cfg["connector_name"]
     cloud = args.cloud or cfg.get("cloud", "aws").strip() or "aws"
-    tasks_max = int(cfg.get("tasks_max", "1") or "1")
+    tasks_max = max(1, int(cfg.get("tasks_max", "1") or "1"))
 
     # 3. Resolve plugin ID (upload if not already known)
     plugin_id = args.plugin_id or cfg.get("plugin_id", "").strip()
@@ -1024,7 +1026,7 @@ def _source_main(argv: Optional[List[str]] = None) -> int:
             else:
                 print(
                     "Warning: Could not discover source cluster topology; "
-                    "falling back to default egress ranges (4100-4107, 4200-4207).",
+                    "falling back to default egress ranges (4100-4103, 4200-4203).",
                     file=sys.stderr,
                 )
 

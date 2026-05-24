@@ -10,7 +10,10 @@ print a warning if it is not installed.
 
 from __future__ import annotations
 
+import os
+import shutil
 import sys
+import tempfile
 from typing import List, Optional
 
 from sn_confluent.core.pem import SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
@@ -28,31 +31,52 @@ class HermesClient:
         client_cert_pem: bytes,
         client_key_pem: bytes,
         key_password: Optional[str] = None,
+        brokers_per_cluster: int = SN_BROKERS_PER_CLUSTER,
     ) -> None:
         self.instance_name = instance_name
+        self._brokers_per_cluster = brokers_per_cluster
+        # kafka-python 2.x only accepts file paths (ssl_cafile etc.), not in-memory _data variants.
+        self._tmpdir = tempfile.mkdtemp(prefix="hermes_ssl_")
+        ca_path = os.path.join(self._tmpdir, "ca.pem")
+        cert_path = os.path.join(self._tmpdir, "cert.pem")
+        key_path = os.path.join(self._tmpdir, "key.pem")
+        with open(ca_path, "wb") as f:
+            f.write(ca_pem)
+        with open(cert_path, "wb") as f:
+            f.write(client_cert_pem)
+        with open(key_path, "wb") as f:
+            f.write(client_key_pem)
         self._ssl = dict(
             security_protocol="SSL",
-            ssl_cafile_data=ca_pem.decode("utf-8"),
-            ssl_certfile_data=client_cert_pem.decode("utf-8"),
-            ssl_keyfile_data=client_key_pem.decode("utf-8"),
+            ssl_cafile=ca_path,
+            ssl_certfile=cert_path,
+            ssl_keyfile=key_path,
         )
         if key_password:
             self._ssl["ssl_password"] = key_password
 
+    def __del__(self) -> None:
+        shutil.rmtree(getattr(self, "_tmpdir", ""), ignore_errors=True)
+
     def _admin(self, bootstrap: str):
-        from kafka.admin import KafkaAdminClient
+        try:
+            from kafka.admin import KafkaAdminClient
+        except ImportError:
+            raise ImportError("kafka-python is required: pip install kafka-python") from None
         return KafkaAdminClient(bootstrap_servers=bootstrap, **self._ssl)
 
     @property
     def _hostname(self) -> str:
         """Return the broker hostname, appending .service-now.com if not already a FQDN."""
+        if not self.instance_name:
+            raise ValueError("instance_name must not be empty")
         if "." in self.instance_name:
             return self.instance_name
         return f"{self.instance_name}.service-now.com"
 
-    def _bootstrap(self, base_port: int, n: int = SN_BROKERS_PER_CLUSTER) -> str:
+    def _bootstrap(self, base_port: int) -> str:
         return ",".join(
-            f"{self._hostname}:{base_port + i}" for i in range(n)
+            f"{self._hostname}:{base_port + i}" for i in range(self._brokers_per_cluster)
         )
 
     def list_topics(self, base_port: int = _SINK_BASE_PORT) -> Optional[List[str]]:
@@ -62,6 +86,9 @@ class HermesClient:
         try:
             admin = self._admin(bootstrap)
             raw = admin.list_topics()
+        except ImportError as exc:
+            print(f"Warning: {exc}", file=sys.stderr)
+            return None
         except Exception as exc:
             print(
                 f"Warning: Could not connect to Hermes at {bootstrap}: {exc}",
@@ -99,6 +126,9 @@ class HermesClient:
                 )
                 return None
             return sorted(b.port for b in brokers)
+        except ImportError as exc:
+            print(f"Warning: {exc}", file=sys.stderr)
+            return None
         except Exception as exc:
             print(
                 f"Warning: Could not probe Hermes cluster at {bootstrap}: {exc}",
@@ -118,7 +148,7 @@ class HermesClient:
         Returns None on failure — caller should fall back to the default port ranges
         (SN_SOURCE_CLUSTERS / SN_BROKERS_PER_CLUSTER).
         """
-        parts: List[str] = []
+        endpoints: List[str] = []
         for base_port in SN_SOURCE_CLUSTERS:
             ports = self.discover_broker_ports(base_port)
             if ports is None:
@@ -127,11 +157,8 @@ class HermesClient:
                 f"  Source cluster {base_port}: {len(ports)} broker(s), "
                 f"ports {ports[0]}-{ports[-1]}"
             )
-            parts.append(
-                f"{self._hostname}:"
-                + ",".join(str(p) for p in ports)
-            )
-        return ",".join(parts)
+            endpoints.extend(f"{self._hostname}:{p}" for p in ports)
+        return ",".join(endpoints)
 
 
 __all__ = ["HermesClient"]
