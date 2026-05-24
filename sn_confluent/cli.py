@@ -17,7 +17,7 @@ SUBCOMMAND_HELP = {
     "mirror": "Mirror ServiceNow Kafka topics to Confluent Cloud",
     "worker": "Generate Connect worker config and start script for Replicator",
     "replicate": "Deploy a Confluent Replicator connector",
-    "deploy": "Deploy the ServiceNow Hermes Kafka Connector to Confluent Cloud",
+    "deploy": "Deploy the ServiceNow Hermes Kafka Connector to Confluent Cloud (sink or source)",
     "api-key": "Create, list, or delete Confluent Cloud Kafka API keys",
     "setup": "Guided end-to-end setup wizard",
 }

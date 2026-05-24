@@ -117,7 +117,7 @@ def test_resolve_keystore_empty():
 # ---------------------------------------------------------------------------
 
 def test_build_connector_config_required_keys():
-    cfg = dm.build_connector_config(
+    cfg = dm.build_sink_config(
         plugin_id="ccp-xyz",
         connector_name="hermes-sink",
         topics="topic-a",
@@ -130,7 +130,7 @@ def test_build_connector_config_required_keys():
         truststore_b64="TS==",
         truststore_password="tspw",
     )
-    assert cfg["connector.class"] == dm.CONNECTOR_CLASS
+    assert cfg["connector.class"] == dm.SINK_CONNECTOR_CLASS
     assert cfg["confluent.custom.plugin.id"] == "ccp-xyz"
     assert cfg["confluent.connector.type"] == "CUSTOM"
     assert cfg["kafka.auth.mode"] == "KAFKA_API_KEY"
@@ -141,7 +141,7 @@ def test_build_connector_config_required_keys():
 
 
 def test_build_connector_config_tasks_max():
-    cfg = dm.build_connector_config(
+    cfg = dm.build_sink_config(
         "ccp-1", "n", "t", "k", "s", "i", "h", "ks", "kp", "ts", "tp", tasks_max=4
     )
     assert cfg["tasks.max"] == "4"
@@ -307,26 +307,26 @@ def _make_proc(returncode=0, stdout="", stderr=""):
 def test_upload_plugin_success():
     payload = json.dumps({"id": "ccp-newplugin", "name": "test-plugin"})
     with patch("subprocess.run", return_value=_make_proc(stdout=payload)):
-        pid = dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws")
+        pid = dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws", "sink", dm.SINK_CONNECTOR_CLASS)
     assert pid == "ccp-newplugin"
 
 
 def test_upload_plugin_failure_exits():
     with patch("subprocess.run", return_value=_make_proc(returncode=1, stderr="auth error")):
         with pytest.raises(SystemExit):
-            dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws")
+            dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws", "sink", dm.SINK_CONNECTOR_CLASS)
 
 
 def test_upload_plugin_bad_json_exits():
     with patch("subprocess.run", return_value=_make_proc(stdout="not-json")):
         with pytest.raises(SystemExit):
-            dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws")
+            dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws", "sink", dm.SINK_CONNECTOR_CLASS)
 
 
 def test_upload_plugin_missing_id_exits():
     with patch("subprocess.run", return_value=_make_proc(stdout=json.dumps({"name": "p"}))):
         with pytest.raises(SystemExit):
-            dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws")
+            dm.upload_plugin("/fake/connector.zip", "test-plugin", "aws", "sink", dm.SINK_CONNECTOR_CLASS)
 
 
 # ---------------------------------------------------------------------------
@@ -386,10 +386,10 @@ def test_poll_connector_timeout_exits():
 
 def test_main_dry_run(tmp, capsys):
     conf = _write_conf(tmp)
-    with patch("sn_confluent.deploy.main.check_confluent_cli"):
+    with patch("sn_confluent.deploy.main.ensure_authenticated"):
         with patch("sn_confluent.deploy.main._glob.glob", return_value=[]):
             with patch("sn_confluent.deploy.main.validate_keystores", return_value=True):
-                rc = dm.main(["--config", conf, "--dry-run", "--no-wizard"])
+                rc = dm.main(["sink", "--config", conf, "--dry-run", "--no-wizard"])
     assert rc == 0
     out = capsys.readouterr().out
     assert "dry-run" in out
@@ -400,18 +400,18 @@ def test_main_dry_run(tmp, capsys):
 
 def test_main_missing_plugin_no_wizard_exits(tmp):
     conf = _write_conf(tmp, MINIMAL_CONF.replace("plugin_id = ccp-abc123", "plugin_id ="))
-    with patch("sn_confluent.deploy.main.check_confluent_cli"):
+    with patch("sn_confluent.deploy.main.ensure_authenticated"):
         with patch("sn_confluent.deploy.main._glob.glob", return_value=[]):
             with pytest.raises(SystemExit):
-                dm.main(["--config", conf, "--no-wizard"])
+                dm.main(["sink", "--config", conf, "--no-wizard"])
 
 
 def test_main_missing_topics_no_wizard_exits(tmp):
     conf_text = MINIMAL_CONF.replace("topics = my-topic", "topics =")
     conf = _write_conf(tmp, conf_text)
-    with patch("sn_confluent.deploy.main.check_confluent_cli"):
+    with patch("sn_confluent.deploy.main.ensure_authenticated"):
         with pytest.raises(SystemExit):
-            dm.main(["--config", conf, "--no-wizard"])
+            dm.main(["sink", "--config", conf, "--no-wizard"])
 
 
 # ---------------------------------------------------------------------------

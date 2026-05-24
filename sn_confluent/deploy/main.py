@@ -1,7 +1,8 @@
 # Deploy the ServiceNow Hermes Kafka Connector as a Confluent Cloud Custom Connector.
 #
-# Usage: sn-confluent deploy [--config PATH] [--plugin-id ID | --plugin-file PATH]
-#        [--cloud {aws,gcp,azure}] [--no-wizard] [--dry-run] [--timeout SECONDS]
+# Usage: sn-confluent deploy sink   [--config PATH] [--plugin-id ID | --plugin-file PATH]
+#                                   [--cloud {aws,gcp,azure}] [--no-wizard] [--dry-run]
+#        sn-confluent deploy source [same flags]
 
 import argparse
 import base64
@@ -19,8 +20,9 @@ from typing import List, Optional, Tuple
 from sn_confluent.core.pem import check_confluent_cli, ensure_authenticated
 from sn_confluent.core.config import load_config as _core_load_config
 
-CONNECTOR_CLASS = "com.servicenow.kafka.connect.hermes.HermesSinkConnector"
-CONNECTOR_TYPE = "sink"
+SINK_CONNECTOR_CLASS = "com.servicenow.kafka.connect.hermes.HermesSinkConnector"
+SOURCE_CONNECTOR_CLASS = "com.servicenow.kafka.connect.hermes.HermesSourceConnector"
+
 SENSITIVE_PROPERTIES_CSV = (
     "hermes.ssl.keystore.b64,"
     "hermes.ssl.keystore.password,"
@@ -44,13 +46,22 @@ _SENSITIVE_CONFIG_KEYS = frozenset({
     "hermes.ssl.truststore.password",
 })
 
-EGRESS_NOTE = """\
+SINK_EGRESS_NOTE = """\
 Action required — configure Confluent Cloud egress endpoint:
-  {instance}.service-now.com:4000-4050
+  {instance}.service-now.com:4000-4007
 
 In the Confluent Cloud Console:
   Connectors > {connector} > Networking > Add egress endpoint
 """
+
+SOURCE_EGRESS_NOTE = """\
+Action required — configure Confluent Cloud egress endpoints for two Hermes clusters:
+  {instance}.service-now.com:4100-4107
+  {instance}.service-now.com:4200-4207
+
+In the Confluent Cloud Console:
+  Connectors > {connector} > Networking > Add egress endpoint
+"""  # TODO: verify port ranges per cluster
 
 
 def load_config(path: str) -> dict:
@@ -142,9 +153,9 @@ def resolve_api_credentials(
 ) -> tuple:
     """Resolve Kafka API key/secret for the connector.
 
-    Order: CC_API_KEY/CC_API_SECRET env vars → config kafka_api_key/kafka_api_secret
-    → auto-generate via confluent api-key create (when environment_id + cluster_id are
-    available) → interactive prompt.
+    Order: CC_API_KEY/CC_API_SECRET env vars -> config kafka_api_key/kafka_api_secret
+    -> auto-generate via confluent api-key create (when environment_id + cluster_id are
+    available) -> interactive prompt.
     """
     api_key = os.environ.get("CC_API_KEY", "").strip() or cfg.get("kafka_api_key", "").strip()
     api_secret = os.environ.get("CC_API_SECRET", "").strip() or cfg.get("kafka_api_secret", "").strip()
@@ -302,15 +313,21 @@ def _resolve_hermes_pem(
         return None
 
 
-def upload_plugin(plugin_file: str, plugin_name: str, cloud: str) -> str:
+def upload_plugin(
+    plugin_file: str,
+    plugin_name: str,
+    cloud: str,
+    connector_type: str,
+    connector_class: str,
+) -> str:
     """Upload the connector ZIP as a Confluent Cloud custom plugin. Returns plugin ID."""
     print(f"Uploading plugin from {plugin_file}...")
     result = subprocess.run(
         [
             "confluent", "connect", "custom-plugin", "create", plugin_name,
             "--plugin-file", plugin_file,
-            "--connector-type", CONNECTOR_TYPE,
-            "--connector-class", CONNECTOR_CLASS,
+            "--connector-type", connector_type,
+            "--connector-class", connector_class,
             "--sensitive-properties", SENSITIVE_PROPERTIES_CSV,
             "--cloud", cloud,
             "--output", "json",
@@ -350,7 +367,7 @@ def update_plugin(plugin_id: str, plugin_file: str) -> None:
     print(f"Plugin {plugin_id} updated.")
 
 
-def build_connector_config(
+def build_sink_config(
     plugin_id: str,
     connector_name: str,
     topics: str,
@@ -366,7 +383,7 @@ def build_connector_config(
 ) -> dict:
     return {
         "name": connector_name,
-        "connector.class": CONNECTOR_CLASS,
+        "connector.class": SINK_CONNECTOR_CLASS,
         "confluent.custom.plugin.id": plugin_id,
         "confluent.connector.type": "CUSTOM",
         "tasks.max": str(tasks_max),
@@ -385,6 +402,50 @@ def build_connector_config(
         "confluent.custom.connection.endpoints": (
             f"{instance_name}.service-now.com:"
             + ",".join(str(p) for p in range(4000, 4008))
+        ),
+    }
+
+
+def build_source_config(
+    plugin_id: str,
+    connector_name: str,
+    destination_topic: str,
+    api_key: str,
+    api_secret: str,
+    instance_name: str,
+    hermes_source_topic: str,
+    keystore_b64: str,
+    keystore_password: str,
+    truststore_b64: str,
+    truststore_password: str,
+    tasks_max: int = 1,
+    consumer_group_id: str = "hermes-connect-source",
+) -> dict:
+    return {
+        "name": connector_name,
+        "connector.class": SOURCE_CONNECTOR_CLASS,
+        "confluent.custom.plugin.id": plugin_id,
+        "confluent.connector.type": "CUSTOM",
+        "tasks.max": str(tasks_max),
+        "key.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+        "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+        "kafka.auth.mode": "KAFKA_API_KEY",
+        "kafka.api.key": api_key,
+        "kafka.api.secret": api_secret,
+        "hermes.instance.name": instance_name,
+        "hermes.source.topic": hermes_source_topic,
+        "hermes.consumer.group.id": consumer_group_id,
+        "hermes.destination.topic": destination_topic,
+        "hermes.ssl.keystore.b64": keystore_b64,
+        "hermes.ssl.keystore.password": keystore_password,
+        "hermes.ssl.truststore.b64": truststore_b64,
+        "hermes.ssl.truststore.password": truststore_password,
+        # Two Hermes peer clusters; TODO: verify port ranges and count per cluster
+        "confluent.custom.connection.endpoints": (
+            f"{instance_name}.service-now.com:"
+            + ",".join(str(p) for p in range(4100, 4108))
+            + f",{instance_name}.service-now.com:"
+            + ",".join(str(p) for p in range(4200, 4208))
         ),
     }
 
@@ -487,97 +548,9 @@ def _mask(config: dict) -> dict:
     return {k: "[hidden]" if k in _SENSITIVE_CONFIG_KEYS else v for k, v in config.items()}
 
 
-def _run_wizard(cfg: dict, missing: set) -> dict:
-    """Prompt for any values absent from config. Returns the updated cfg dict."""
-    try:
-        import questionary
-    except ImportError:
-        print(
-            "Error: questionary is required for interactive mode.\n"
-            "Install it: pip install questionary\n"
-            "Or use --no-wizard with a fully populated deploy.conf.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    print("\n--- Hermes Connector Deployment Wizard ---\n")
-
-    # Collect instance name and keystores first — needed for Hermes topic discovery.
-    if "instance_name" in missing:
-        cfg["instance_name"] = questionary.text(
-            "ServiceNow instance name (bare, e.g. myinstance):"
-        ).ask()
-
-    if "keystore" in missing:
-        source = questionary.select(
-            "Provide keystore as:",
-            choices=["File path (encode automatically)", "Base64 string (paste)"],
-        ).ask()
-        if source and "File path" in source:
-            cfg["keystore_path"] = questionary.text("Path to keystore.p12:").ask()
-        else:
-            cfg["keystore_b64"] = questionary.password("Base64-encoded keystore.p12:").ask()
-
-    if "keystore_password" in missing:
-        cfg["keystore_password"] = questionary.password("Keystore password:").ask()
-
-    if "truststore" in missing:
-        source = questionary.select(
-            "Provide truststore as:",
-            choices=["File path (encode automatically)", "Base64 string (paste)"],
-        ).ask()
-        if source and "File path" in source:
-            cfg["truststore_path"] = questionary.text("Path to truststore.p12:").ask()
-        else:
-            cfg["truststore_b64"] = questionary.password("Base64-encoded truststore.p12:").ask()
-
-    if "truststore_password" in missing:
-        cfg["truststore_password"] = questionary.password("Truststore password:").ask()
-
-    # CC source topic picker
-    if "topics" in missing:
-        print("Fetching topics from Confluent Cloud...")
-        cc_topics = list_cc_topics(cfg["environment_id"], cfg["cluster_id"])
-        if cc_topics:
-            selected = questionary.checkbox(
-                "Select Confluent Cloud topic(s) to read from:",
-                choices=cc_topics,
-            ).ask()
-            cfg["topics"] = ",".join(selected) if selected else ""
-        else:
-            cfg["topics"] = questionary.text(
-                "Confluent Cloud topic(s) to read from (comma-separated):"
-            ).ask()
-
-    # Hermes destination topic picker
-    if "hermes_topic" in missing:
-        instance_name = cfg.get("instance_name", "")
-        hermes_pem = _resolve_hermes_pem(cfg, cfg.get("_pem_dir"))
-        if hermes_pem and instance_name:
-            print(f"Fetching topics from Hermes ({instance_name}.service-now.com)...")
-            hermes_topics = list_hermes_topics(instance_name, *hermes_pem)
-        else:
-            hermes_topics = None
-
-        if hermes_topics:
-            selected = questionary.select(
-                "Select Hermes destination topic:",
-                choices=hermes_topics,
-            ).ask()
-            cfg["hermes_topic"] = selected or ""
-        else:
-            default = f"snc.{instance_name or 'myinstance'}.sn_streamconnect.my-topic"
-            cfg["hermes_topic"] = questionary.text(
-                "Hermes topic name:", default=default,
-            ).ask()
-
-    return cfg
-
-
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Deploy the ServiceNow Hermes Kafka Connector to Confluent Cloud."
-    )
+def _build_arg_parser(description: str) -> argparse.ArgumentParser:
+    """Shared argument parser for sink and source subcommands."""
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument(
         "--config", default="deploy.conf",
         help="Path to deploy.conf (default: ./deploy.conf)",
@@ -613,6 +586,188 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--no-wizard", action="store_true",
         help="Non-interactive: fail if any required value is missing from config",
+    )
+    return parser
+
+
+def _run_sink_wizard(cfg: dict, missing: set) -> dict:
+    """Prompt for any values absent from sink config. Returns the updated cfg dict."""
+    try:
+        import questionary
+    except ImportError:
+        print(
+            "Error: questionary is required for interactive mode.\n"
+            "Install it: pip install questionary\n"
+            "Or use --no-wizard with a fully populated deploy.conf.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print("\n--- Hermes Sink Connector Deployment Wizard ---\n")
+
+    # Collect instance name and keystores first — needed for Hermes topic discovery.
+    if "instance_name" in missing:
+        cfg["instance_name"] = questionary.text(
+            "ServiceNow instance name (bare, e.g. myinstance):"
+        ).ask()
+
+    if "keystore" in missing:
+        source = questionary.select(
+            "Provide keystore as:",
+            choices=["File path (encode automatically)", "Base64 string (paste)"],
+        ).ask()
+        if source and "File path" in source:
+            cfg["keystore_path"] = questionary.text("Path to keystore.p12:").ask()
+        else:
+            cfg["keystore_b64"] = questionary.password("Base64-encoded keystore.p12:").ask()
+
+    if "keystore_password" in missing:
+        cfg["keystore_password"] = questionary.password("Keystore password:").ask()
+
+    if "truststore" in missing:
+        source = questionary.select(
+            "Provide truststore as:",
+            choices=["File path (encode automatically)", "Base64 string (paste)"],
+        ).ask()
+        if source and "File path" in source:
+            cfg["truststore_path"] = questionary.text("Path to truststore.p12:").ask()
+        else:
+            cfg["truststore_b64"] = questionary.password("Base64-encoded truststore.p12:").ask()
+
+    if "truststore_password" in missing:
+        cfg["truststore_password"] = questionary.password("Truststore password:").ask()
+
+    # CC topic picker — sink reads FROM Confluent Cloud
+    if "topics" in missing:
+        print("Fetching topics from Confluent Cloud...")
+        cc_topics = list_cc_topics(cfg["environment_id"], cfg["cluster_id"])
+        if cc_topics:
+            selected = questionary.checkbox(
+                "Select Confluent Cloud topic(s) to read from:",
+                choices=cc_topics,
+            ).ask()
+            cfg["topics"] = ",".join(selected) if selected else ""
+        else:
+            cfg["topics"] = questionary.text(
+                "Confluent Cloud topic(s) to read from (comma-separated):"
+            ).ask()
+
+    # Hermes destination topic picker — sink writes TO Hermes
+    if "hermes_topic" in missing:
+        instance_name = cfg.get("instance_name", "")
+        hermes_pem = _resolve_hermes_pem(cfg, cfg.get("_pem_dir"))
+        if hermes_pem and instance_name:
+            print(f"Fetching topics from Hermes ({instance_name}.service-now.com)...")
+            hermes_topics = list_hermes_topics(instance_name, *hermes_pem)
+        else:
+            hermes_topics = None
+
+        if hermes_topics:
+            selected = questionary.select(
+                "Select Hermes destination topic:",
+                choices=hermes_topics,
+            ).ask()
+            cfg["hermes_topic"] = selected or ""
+        else:
+            default = f"snc.{instance_name or 'myinstance'}.sn_streamconnect.my-topic"
+            cfg["hermes_topic"] = questionary.text(
+                "Hermes topic to write to:", default=default,
+            ).ask()
+
+    return cfg
+
+
+def _run_source_wizard(cfg: dict, missing: set) -> dict:
+    """Prompt for any values absent from source config. Returns the updated cfg dict."""
+    try:
+        import questionary
+    except ImportError:
+        print(
+            "Error: questionary is required for interactive mode.\n"
+            "Install it: pip install questionary\n"
+            "Or use --no-wizard with a fully populated deploy.conf.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print("\n--- Hermes Source Connector Deployment Wizard ---\n")
+
+    # Collect instance name and keystores first — needed for Hermes topic discovery.
+    if "instance_name" in missing:
+        cfg["instance_name"] = questionary.text(
+            "ServiceNow instance name (bare, e.g. myinstance):"
+        ).ask()
+
+    if "keystore" in missing:
+        source = questionary.select(
+            "Provide keystore as:",
+            choices=["File path (encode automatically)", "Base64 string (paste)"],
+        ).ask()
+        if source and "File path" in source:
+            cfg["keystore_path"] = questionary.text("Path to keystore.p12:").ask()
+        else:
+            cfg["keystore_b64"] = questionary.password("Base64-encoded keystore.p12:").ask()
+
+    if "keystore_password" in missing:
+        cfg["keystore_password"] = questionary.password("Keystore password:").ask()
+
+    if "truststore" in missing:
+        source = questionary.select(
+            "Provide truststore as:",
+            choices=["File path (encode automatically)", "Base64 string (paste)"],
+        ).ask()
+        if source and "File path" in source:
+            cfg["truststore_path"] = questionary.text("Path to truststore.p12:").ask()
+        else:
+            cfg["truststore_b64"] = questionary.password("Base64-encoded truststore.p12:").ask()
+
+    if "truststore_password" in missing:
+        cfg["truststore_password"] = questionary.password("Truststore password:").ask()
+
+    # Hermes source topic picker — source reads FROM Hermes
+    if "hermes_topic" in missing:
+        instance_name = cfg.get("instance_name", "")
+        hermes_pem = _resolve_hermes_pem(cfg, cfg.get("_pem_dir"))
+        if hermes_pem and instance_name:
+            print(f"Fetching topics from Hermes ({instance_name}.service-now.com)...")
+            hermes_topics = list_hermes_topics(instance_name, *hermes_pem)
+        else:
+            hermes_topics = None
+
+        if hermes_topics:
+            selected = questionary.select(
+                "Select Hermes topic to read from:",
+                choices=hermes_topics,
+            ).ask()
+            cfg["hermes_topic"] = selected or ""
+        else:
+            default = f"snc.{instance_name or 'myinstance'}.sn_streamconnect.my-topic"
+            cfg["hermes_topic"] = questionary.text(
+                "Hermes topic to read from:", default=default,
+            ).ask()
+
+    # CC topic picker — source writes TO Confluent Cloud
+    if "topics" in missing:
+        print("Fetching topics from Confluent Cloud...")
+        cc_topics = list_cc_topics(cfg["environment_id"], cfg["cluster_id"])
+        if cc_topics:
+            selected = questionary.select(
+                "Select Confluent Cloud topic to write to:",
+                choices=cc_topics,
+            ).ask()
+            cfg["topics"] = selected or ""
+        else:
+            cfg["topics"] = questionary.text(
+                "Confluent Cloud topic to write to:"
+            ).ask()
+
+    return cfg
+
+
+def _sink_main(argv: Optional[List[str]] = None) -> int:
+    parser = _build_arg_parser(
+        "Deploy the ServiceNow HermesSinkConnector to Confluent Cloud."
+        " Data flows: Confluent Cloud topics -> ServiceNow Hermes."
     )
     args = parser.parse_args(argv)
 
@@ -666,7 +821,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             plugin_id = "ccp-dryrun"
         else:
             plugin_name = cfg.get("plugin_name", "").strip() or f"{connector_name}-plugin"
-            plugin_id = upload_plugin(plugin_file, plugin_name, cloud)
+            plugin_id = upload_plugin(
+                plugin_file, plugin_name, cloud,
+                connector_type="sink",
+                connector_class=SINK_CONNECTOR_CLASS,
+            )
 
     # 4. Resolve Confluent Cloud API credentials (used in kafka.api.key/secret)
     api_key, api_secret = resolve_api_credentials(cfg, environment_id, cluster_id)
@@ -685,8 +844,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     hermes_topic = cfg.get("hermes_topic", "").strip()
 
     # 6. Identify missing values.
-    # keystore/truststore are only required for the live connector config, not for topic listing
-    # (pem_dir covers listing). Mark them missing only when they'll actually be needed.
     missing = set()
     if not topics:
         missing.add("topics")
@@ -708,7 +865,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             for key in sorted(missing):
                 print(f"Error: Missing required value: {key}", file=sys.stderr)
             sys.exit(1)
-        cfg = _run_wizard(cfg, missing)
+        cfg = _run_sink_wizard(cfg, missing)
         keystore_b64 = resolve_keystore(cfg, "keystore_b64", "keystore_path")
         truststore_b64 = resolve_keystore(cfg, "truststore_b64", "truststore_path")
         keystore_password = cfg.get("keystore_password", "").strip()
@@ -724,14 +881,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("Error: hermes_topic is required.", file=sys.stderr)
             sys.exit(1)
 
-    # 7. Validate keystores (decode PKCS12, print cert details, fail early on wrong password)
+    # 7. Validate keystores
     if keystore_b64 and truststore_b64:
         print("Validating keystores...")
         if not validate_keystores(keystore_b64, keystore_password, truststore_b64, truststore_password):
             sys.exit(1)
 
     # 8. Build connector config
-    connector_cfg = build_connector_config(
+    connector_cfg = build_sink_config(
         plugin_id=plugin_id,
         connector_name=connector_name,
         topics=topics,
@@ -754,7 +911,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             f"\nWould run: confluent connect cluster create --config-file <config.json>"
             f" --environment {environment_id} --cluster {cluster_id}"
         )
-        print(EGRESS_NOTE.format(instance=instance_name or "<instance>", connector=connector_name))
+        print(SINK_EGRESS_NOTE.format(instance=instance_name or "<instance>", connector=connector_name))
         return 0
 
     # 10. Wizard confirmation
@@ -778,10 +935,220 @@ def main(argv: Optional[List[str]] = None) -> int:
     poll_connector(environment_id, cluster_id, connector_id, timeout=args.timeout)
     print(f"Connector '{connector_id}' is RUNNING.")
 
-    # 13. Remind about egress endpoints (can't be automated via CLI)
-    print(EGRESS_NOTE.format(instance=instance_name, connector=connector_name))
+    # 13. Remind about egress endpoints
+    print(SINK_EGRESS_NOTE.format(instance=instance_name, connector=connector_name))
 
     return 0
+
+
+def _source_main(argv: Optional[List[str]] = None) -> int:
+    parser = _build_arg_parser(
+        "Deploy the ServiceNow HermesSourceConnector to Confluent Cloud."
+        " Data flows: ServiceNow Hermes -> Confluent Cloud topics."
+    )
+    args = parser.parse_args(argv)
+
+    # 1. Load config
+    cfg = load_config(args.config)
+
+    # 2. Check confluent CLI is on PATH and authenticated
+    ensure_authenticated(cfg)
+
+    environment_id = cfg["environment_id"]
+    cluster_id = cfg["cluster_id"]
+    connector_name = cfg["connector_name"]
+    cloud = args.cloud or cfg.get("cloud", "aws").strip() or "aws"
+    tasks_max = int(cfg.get("tasks_max", "1") or "1")
+
+    # 3. Resolve plugin ID (upload if not already known)
+    plugin_id = args.plugin_id or cfg.get("plugin_id", "").strip()
+
+    if args.update_plugin:
+        if not plugin_id:
+            print("Error: --update-plugin requires --plugin-id or plugin_id in deploy.conf.", file=sys.stderr)
+            sys.exit(1)
+        plugin_file = args.plugin_file or find_plugin_file(cfg.get("plugin_file", "").strip() or None)
+        if not plugin_file:
+            print(
+                "Error: Connector ZIP not found.\n"
+                "Build it first:\n"
+                "  cd ../ServiceNow-source-and-sink-connector && mvn package -DskipTests\n"
+                "Or pass --plugin-file <path>.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not args.dry_run:
+            update_plugin(plugin_id, plugin_file)
+        else:
+            print(f"[dry-run] Would update plugin {plugin_id} from: {os.path.abspath(plugin_file)}")
+        return 0
+    elif not plugin_id:
+        plugin_file = args.plugin_file or find_plugin_file(cfg.get("plugin_file", "").strip() or None)
+        if not plugin_file:
+            print(
+                "Error: Connector ZIP not found.\n"
+                "Build it first:\n"
+                "  cd ../ServiceNow-source-and-sink-connector && mvn package -DskipTests\n"
+                "Or pass --plugin-file <path> or set plugin_id in deploy.conf to skip upload.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if args.dry_run:
+            print(f"[dry-run] Would upload plugin from: {os.path.abspath(plugin_file)}")
+            plugin_id = "ccp-dryrun"
+        else:
+            plugin_name = cfg.get("plugin_name", "").strip() or f"{connector_name}-plugin"
+            plugin_id = upload_plugin(
+                plugin_file, plugin_name, cloud,
+                connector_type="source",
+                connector_class=SOURCE_CONNECTOR_CLASS,
+            )
+
+    # 4. Resolve Confluent Cloud API credentials
+    api_key, api_secret = resolve_api_credentials(cfg, environment_id, cluster_id)
+
+    # 5. Resolve keystore/truststore as base64
+    pem_dir = args.pem_dir or cfg.get("pem_dir", "").strip() or None
+    cfg["_pem_dir"] = pem_dir
+
+    keystore_b64 = resolve_keystore(cfg, "keystore_b64", "keystore_path")
+    truststore_b64 = resolve_keystore(cfg, "truststore_b64", "truststore_path")
+    keystore_password = cfg.get("keystore_password", "").strip()
+    truststore_password = cfg.get("truststore_password", "").strip()
+
+    destination_topic = cfg.get("topics", "").strip()
+    instance_name = cfg.get("instance_name", "").strip()
+    hermes_source_topic = cfg.get("hermes_topic", "").strip()
+    consumer_group_id = cfg.get("consumer_group_id", "hermes-connect-source").strip() or "hermes-connect-source"
+
+    # 6. Identify missing values.
+    missing = set()
+    if not destination_topic:
+        missing.add("topics")
+    if not instance_name:
+        missing.add("instance_name")
+    if not hermes_source_topic:
+        missing.add("hermes_topic")
+    if not keystore_b64:
+        missing.add("keystore")
+    if not keystore_password:
+        missing.add("keystore_password")
+    if not truststore_b64:
+        missing.add("truststore")
+    if not truststore_password:
+        missing.add("truststore_password")
+
+    if missing:
+        if args.no_wizard:
+            for key in sorted(missing):
+                print(f"Error: Missing required value: {key}", file=sys.stderr)
+            sys.exit(1)
+        cfg = _run_source_wizard(cfg, missing)
+        keystore_b64 = resolve_keystore(cfg, "keystore_b64", "keystore_path")
+        truststore_b64 = resolve_keystore(cfg, "truststore_b64", "truststore_path")
+        keystore_password = cfg.get("keystore_password", "").strip()
+        truststore_password = cfg.get("truststore_password", "").strip()
+        destination_topic = cfg.get("topics", "").strip()
+        instance_name = cfg.get("instance_name", "").strip()
+        hermes_source_topic = cfg.get("hermes_topic", "").strip()
+
+        if not destination_topic:
+            print("Error: A destination Confluent Cloud topic is required.", file=sys.stderr)
+            sys.exit(1)
+        if not hermes_source_topic:
+            print("Error: hermes_topic is required.", file=sys.stderr)
+            sys.exit(1)
+
+    # 7. Validate keystores
+    if keystore_b64 and truststore_b64:
+        print("Validating keystores...")
+        if not validate_keystores(keystore_b64, keystore_password, truststore_b64, truststore_password):
+            sys.exit(1)
+
+    # 8. Build connector config
+    connector_cfg = build_source_config(
+        plugin_id=plugin_id,
+        connector_name=connector_name,
+        destination_topic=destination_topic,
+        api_key=api_key,
+        api_secret=api_secret,
+        instance_name=instance_name,
+        hermes_source_topic=hermes_source_topic,
+        keystore_b64=keystore_b64,
+        keystore_password=keystore_password,
+        truststore_b64=truststore_b64,
+        truststore_password=truststore_password,
+        tasks_max=tasks_max,
+        consumer_group_id=consumer_group_id,
+    )
+
+    # 9. Dry-run: show masked config and exit
+    if args.dry_run:
+        print("--- Connector config (dry-run) ---")
+        print(json.dumps(_mask(connector_cfg), indent=2))
+        print(
+            f"\nWould run: confluent connect cluster create --config-file <config.json>"
+            f" --environment {environment_id} --cluster {cluster_id}"
+        )
+        print(SOURCE_EGRESS_NOTE.format(instance=instance_name or "<instance>", connector=connector_name))
+        return 0
+
+    # 10. Wizard confirmation
+    if not args.no_wizard:
+        try:
+            import questionary
+            print("\n--- Connector config preview ---")
+            print(json.dumps(_mask(connector_cfg), indent=2))
+            if not questionary.confirm("Create connector?", default=False).ask():
+                print("Aborted.")
+                return 0
+        except ImportError:
+            pass
+
+    # 11. Create connector
+    print(f"Creating connector '{connector_name}'...")
+    connector_id = create_connector(environment_id, cluster_id, connector_cfg)
+    print(f"Connector created: {connector_id}")
+
+    # 12. Poll until RUNNING
+    poll_connector(environment_id, cluster_id, connector_id, timeout=args.timeout)
+    print(f"Connector '{connector_id}' is RUNNING.")
+
+    # 13. Remind about egress endpoints
+    print(SOURCE_EGRESS_NOTE.format(instance=instance_name, connector=connector_name))
+
+    return 0
+
+
+def _print_deploy_help() -> None:
+    print("usage: sn-confluent deploy <subcommand> [<args>]")
+    print()
+    print("Deploy the ServiceNow Hermes Kafka Connector to Confluent Cloud.")
+    print()
+    print("Subcommands:")
+    print("  sink    Deploy HermesSinkConnector   (Confluent Cloud topics -> ServiceNow Hermes)")
+    print("  source  Deploy HermesSourceConnector (ServiceNow Hermes -> Confluent Cloud topics)")
+    print()
+    print("Run 'sn-confluent deploy <subcommand> --help' for subcommand-specific options.")
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] in ("-h", "--help"):
+        _print_deploy_help()
+        return 0
+    if not argv:
+        _print_deploy_help()
+        return 2
+    sub, rest = argv[0], argv[1:]
+    if sub == "sink":
+        return _sink_main(rest)
+    elif sub == "source":
+        return _source_main(rest)
+    print(f"sn-confluent deploy: unknown subcommand '{sub}'", file=sys.stderr)
+    _print_deploy_help()
+    return 2
 
 
 if __name__ == "__main__":
