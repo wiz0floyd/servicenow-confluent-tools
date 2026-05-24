@@ -9,6 +9,7 @@ import getpass
 import glob as _glob
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -45,15 +46,19 @@ _SENSITIVE_CONFIG_KEYS = frozenset({
 
 EGRESS_NOTE = """\
 Action required — configure Confluent Cloud egress endpoint:
-  {instance}.service-now.com:4000-4003
+  {instance}.service-now.com:4000-4050
 
 In the Confluent Cloud Console:
-  Connectors → {connector} → Networking → Add egress endpoint
+  Connectors > {connector} > Networking > Add egress endpoint
 """
 
 
 def load_config(path: str) -> dict:
     return _core_load_config(path, REQUIRED_KEYS)
+
+
+def _version_key(path: str) -> tuple:
+    return tuple(int(n) for n in re.findall(r'\d+', os.path.basename(path)))
 
 
 def find_plugin_file(configured_path: Optional[str]) -> Optional[str]:
@@ -62,7 +67,7 @@ def find_plugin_file(configured_path: Optional[str]) -> Optional[str]:
         return configured_path if os.path.isfile(configured_path) else None
     matches = _glob.glob(_DEFAULT_PLUGIN_GLOB)
     if matches:
-        return sorted(matches)[-1]  # latest by lexicographic version sort
+        return max(matches, key=_version_key)
     return None
 
 
@@ -201,6 +206,8 @@ def _extract_pem_from_p12(
     ca_pem = b"".join(c.public_bytes(Encoding.PEM) for c in ca_certs)
 
     ks_key, ks_cert, _extra = _load(keystore_b64, keystore_password)
+    if ks_cert is None:
+        raise ValueError("keystore PKCS12 contains no certificate")
     client_cert_pem = ks_cert.public_bytes(Encoding.PEM)
     client_key_pem = ks_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
 
@@ -243,6 +250,7 @@ def list_hermes_topics(
         return None
 
     bootstrap = ",".join(f"{instance_name}.service-now.com:{4000 + i}" for i in range(4))
+    admin = None
     try:
         admin = KafkaAdminClient(
             bootstrap_servers=bootstrap,
@@ -252,10 +260,15 @@ def list_hermes_topics(
             ssl_keyfile_data=client_key_pem.decode("utf-8"),
         )
         raw = admin.list_topics()
-        admin.close()
     except Exception as exc:
         print(f"Warning: Could not connect to Hermes at {bootstrap}: {exc}", file=sys.stderr)
         return None
+    finally:
+        if admin is not None:
+            try:
+                admin.close()
+            except Exception:
+                pass
 
     return sorted(t for t in raw if not t.startswith("__") and not t.startswith("_confluent"))
 
@@ -273,7 +286,7 @@ def _resolve_hermes_pem(
         try:
             from sn_confluent.core.pem import load_pem_files
             return load_pem_files(pem_dir)
-        except SystemExit:
+        except (Exception, SystemExit):
             return None
 
     keystore_b64 = resolve_keystore(cfg, "keystore_b64", "keystore_path")
@@ -320,6 +333,23 @@ def upload_plugin(plugin_file: str, plugin_name: str, cloud: str) -> str:
     return plugin_id
 
 
+def update_plugin(plugin_id: str, plugin_file: str) -> None:
+    """Update an existing custom plugin with a new JAR/ZIP without changing its ID."""
+    print(f"Updating plugin {plugin_id} from {plugin_file}...")
+    result = subprocess.run(
+        [
+            "confluent", "connect", "custom-plugin", "update", plugin_id,
+            "--plugin-file", plugin_file,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Error: Plugin update failed: {result.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Plugin {plugin_id} updated.")
+
+
 def build_connector_config(
     plugin_id: str,
     connector_name: str,
@@ -352,6 +382,10 @@ def build_connector_config(
         "hermes.ssl.keystore.password": keystore_password,
         "hermes.ssl.truststore.b64": truststore_b64,
         "hermes.ssl.truststore.password": truststore_password,
+        "confluent.custom.connection.endpoints": (
+            f"{instance_name}.service-now.com:"
+            + ",".join(str(p) for p in range(4000, 4051))
+        ),
     }
 
 
@@ -395,7 +429,7 @@ def poll_connector(
     environment_id: str,
     cluster_id: str,
     connector_id: str,
-    timeout: int = 120,
+    timeout: int = 900,
     interval: int = 5,
 ) -> None:
     """Poll connector status until RUNNING or FAILED."""
@@ -547,6 +581,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Existing custom plugin ID — skip the upload step",
     )
     parser.add_argument(
+        "--update-plugin", action="store_true", default=False,
+        help="Update the plugin at --plugin-id (or plugin_id in deploy.conf) with a new JAR instead of creating a new plugin",
+    )
+    parser.add_argument(
         "--plugin-file", default=None,
         help="Connector ZIP path (overrides config; default: auto-detect in sibling repo)",
     )
@@ -555,8 +593,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Cloud provider for plugin upload (default: aws)",
     )
     parser.add_argument(
-        "--timeout", type=int, default=120,
-        help="Connector status poll timeout in seconds (default: 120)",
+        "--timeout", type=int, default=900,
+        help="Connector status poll timeout in seconds (default: 900)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -587,7 +625,26 @@ def main(argv: Optional[List[str]] = None) -> int:
     # 3. Resolve plugin ID (upload if not already known)
     plugin_id = args.plugin_id or cfg.get("plugin_id", "").strip()
 
-    if not plugin_id:
+    if args.update_plugin:
+        if not plugin_id:
+            print("Error: --update-plugin requires --plugin-id or plugin_id in deploy.conf.", file=sys.stderr)
+            sys.exit(1)
+        plugin_file = args.plugin_file or find_plugin_file(cfg.get("plugin_file", "").strip() or None)
+        if not plugin_file:
+            print(
+                "Error: Connector ZIP not found.\n"
+                "Build it first:\n"
+                "  cd ../ServiceNow-source-and-sink-connector && mvn package -DskipTests\n"
+                "Or pass --plugin-file <path>.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not args.dry_run:
+            update_plugin(plugin_id, plugin_file)
+        else:
+            print(f"[dry-run] Would update plugin {plugin_id} from: {os.path.abspath(plugin_file)}")
+        return 0
+    elif not plugin_id:
         plugin_file = args.plugin_file or find_plugin_file(cfg.get("plugin_file", "").strip() or None)
         if not plugin_file:
             print(
@@ -602,7 +659,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"[dry-run] Would upload plugin from: {os.path.abspath(plugin_file)}")
             plugin_id = "ccp-dryrun"
         else:
-            plugin_name = cfg.get("plugin_name", f"{connector_name}-plugin").strip()
+            plugin_name = cfg.get("plugin_name", "").strip() or f"{connector_name}-plugin"
             plugin_id = upload_plugin(plugin_file, plugin_name, cloud)
 
     # 4. Resolve Confluent Cloud API credentials (used in kafka.api.key/secret)
@@ -654,6 +711,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         instance_name = cfg.get("instance_name", "").strip()
         hermes_topic = cfg.get("hermes_topic", "").strip()
 
+        if not topics:
+            print("Error: At least one topic is required.", file=sys.stderr)
+            sys.exit(1)
+        if not hermes_topic:
+            print("Error: hermes_topic is required.", file=sys.stderr)
+            sys.exit(1)
+
     # 7. Validate keystores (decode PKCS12, print cert details, fail early on wrong password)
     if keystore_b64 and truststore_b64:
         print("Validating keystores...")
@@ -699,16 +763,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         except ImportError:
             pass
 
-    # 10. Create connector
+    # 11. Create connector
     print(f"Creating connector '{connector_name}'...")
     connector_id = create_connector(environment_id, cluster_id, connector_cfg)
     print(f"Connector created: {connector_id}")
 
-    # 11. Poll until RUNNING
+    # 12. Poll until RUNNING
     poll_connector(environment_id, cluster_id, connector_id, timeout=args.timeout)
     print(f"Connector '{connector_id}' is RUNNING.")
 
-    # 12. Remind about egress endpoints (can't be automated via CLI)
+    # 13. Remind about egress endpoints (can't be automated via CLI)
     print(EGRESS_NOTE.format(instance=instance_name, connector=connector_name))
 
     return 0
