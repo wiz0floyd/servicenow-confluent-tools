@@ -23,13 +23,17 @@ Installs the `sn-confluent` console entry point.
 
 | Subcommand | Description |
 |---|---|
-| `sn-confluent extract`   | Extract `ca.pem`, `client-cert.pem`, and `client-key.pem` from PKCS12 keystores |
-| `sn-confluent link`      | Create a Confluent Cloud cluster link from a source Kafka cluster using mTLS |
-| `sn-confluent mirror`    | Mirror ServiceNow Kafka topics to Confluent Cloud across both DC cluster links with a checkbox UI |
+| `sn-confluent extract` | Extract `ca.pem`, `client-cert.pem`, and `client-key.pem` from PKCS12 keystores |
+| `sn-confluent link` | Create a Confluent Cloud cluster link from a source Kafka cluster using mTLS |
+| `sn-confluent mirror` | Mirror ServiceNow Kafka topics to Confluent Cloud across both DC cluster links with a checkbox UI |
+| `sn-confluent worker` | Generate Connect worker config and start script for Confluent Replicator |
 | `sn-confluent replicate` | Deploy a Confluent Replicator connector between ServiceNow Hermes and Confluent Cloud (bidirectional, interactive wizard) |
-| `sn-confluent setup`     | Guided end-to-end wizard that orchestrates the four steps above in one run |
+| `sn-confluent deploy sink` | Deploy the Hermes Kafka Connector to Confluent Cloud as a **sink** (CC → Hermes) |
+| `sn-confluent deploy source` | Deploy the Hermes Kafka Connector to Confluent Cloud as a **source** (Hermes → CC) |
+| `sn-confluent api-key` | Create, list, or delete Confluent Cloud Kafka API keys |
+| `sn-confluent setup` | Guided end-to-end wizard that orchestrates the steps above in one run |
 
-Run `sn-confluent <subcommand> --help` for command-specific options. Each subcommand also has its own README at `sn_confluent/<subcommand>/README.md`.
+Run `sn-confluent <subcommand> --help` for command-specific options. Most subcommands have a README at `sn_confluent/<subcommand>/README.md`.
 
 ## Typical workflow
 
@@ -46,6 +50,12 @@ sn-confluent mirror --pem-dir /tmp/pems
 
 # Step 4 — deploy Replicator (alternative to native cluster links)
 sn-confluent replicate --pem-dir /tmp/pems
+
+# Alternatively — deploy via the Hermes custom Kafka Connector
+cp sn_confluent/deploy/deploy.conf.example sn_confluent/deploy/deploy.conf  # fill in your cluster/API details
+sn-confluent deploy sink    # CC → Hermes
+# or
+sn-confluent deploy source  # Hermes → CC
 ```
 
 Or run all four with the guided wizard:

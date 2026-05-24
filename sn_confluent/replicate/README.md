@@ -72,23 +72,23 @@ source_clusters     = 4100,4200       # one connector per cluster
 
 ```bash
 # Interactive wizard (cc-to-sn, default)
-python setup_replicator.py
+sn-confluent replicate
 
 # Non-interactive with all topics
-python setup_replicator.py --all --no-wizard
+sn-confluent replicate --all --no-wizard
 
 # Specific topics
-python setup_replicator.py --topics hermes_incidents,hermes_changes
+sn-confluent replicate --topics hermes_incidents,hermes_changes
 
 # Opposite direction
-python setup_replicator.py --direction sn-to-cc
+sn-confluent replicate --direction sn-to-cc
 
 # Dry-run (prints config, no create)
-python setup_replicator.py --dry-run
-python setup_replicator.py --all --no-wizard --dry-run
+sn-confluent replicate --dry-run
+sn-confluent replicate --all --no-wizard --dry-run
 
 # Override connect worker URL
-python setup_replicator.py --connect-url http://my-worker:8083
+sn-confluent replicate --connect-url http://my-worker:8083
 ```
 
 ## Options
@@ -122,7 +122,7 @@ sn-confluent replicate
 |---|---|
 | Connector status is `FAILED` | Check Connect worker logs. For cc-to-sn, verify `connector.client.config.override.policy=All` in worker properties. |
 | "Not authenticated" or 401 from Confluent CLI | Run `confluent login` and retry. |
-| PEM files not found | Run `python ../extract-pem/extract_pem.py` first. See [`extract-pem`](../extract-pem/). |
+| PEM files not found | Run `sn-confluent extract` first. See [`extract-pem`](../extract-pem/). |
 | Connector writes to wrong cluster (cc-to-sn) | Override policy is not set. `producer.override.*` settings are silently ignored without it. |
 | Connection refused on connect URL | Verify the Connect worker is running and the URL/port is correct. |
 

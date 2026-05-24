@@ -44,7 +44,7 @@ instance_name       = snc.yourinstance
 ## Usage
 
 ```bash
-python create_link.py --pem-dir /path/to/pems
+sn-confluent link --pem-dir /path/to/pems
 ```
 
 ## Options
@@ -69,7 +69,7 @@ KEY_PASSWORD=yourpassword sn-confluent link
 Use `--copy-config` to copy the SSL properties block to your clipboard, then paste into **Environments → Cluster links → Create cluster link → Additional configurations**.
 
 ```bash
-python create_link.py --pem-dir /path/to/pems --copy-config
+sn-confluent link --pem-dir /path/to/pems --copy-config
 ```
 
 ## Tests
