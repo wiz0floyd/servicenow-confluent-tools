@@ -347,9 +347,9 @@ def build_sink_config(
         "hermes.ssl.keystore.password": keystore_password,
         "hermes.ssl.truststore.b64": truststore_b64,
         "hermes.ssl.truststore.password": truststore_password,
-        "confluent.custom.connection.endpoints": (
-            f"{instance_name}.service-now.com:"
-            + ",".join(str(p) for p in range(4000, 4008))
+        "confluent.custom.connection.endpoints": ",".join(
+            f"{instance_name if '.' in instance_name else instance_name + '.service-now.com'}:{p}"
+            for p in range(4000, 4008)
         ),
     }
 
