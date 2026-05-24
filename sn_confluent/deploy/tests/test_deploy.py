@@ -148,6 +148,45 @@ def test_build_connector_config_tasks_max():
     assert cfg["tasks.max"] == "4"
 
 
+def test_build_sink_config_endpoints_format():
+    cfg = dm.build_sink_config(
+        "ccp-1", "n", "t", "k", "s", "myinstance", "h", "ks", "kp", "ts", "tp"
+    )
+    assert cfg["confluent.custom.connection.endpoints"] == (
+        "myinstance.service-now.com:4000,4001,4002,4003,4004,4005,4006,4007"
+    )
+
+
+def test_build_sink_config_endpoints_fqdn():
+    cfg = dm.build_sink_config(
+        "ccp-1", "n", "t", "k", "s", "myinstance.service-now.com", "h", "ks", "kp", "ts", "tp"
+    )
+    ep = cfg["confluent.custom.connection.endpoints"]
+    assert ep.startswith("myinstance.service-now.com:")
+    assert "service-now.com.service-now.com" not in ep
+
+
+def test_build_source_config_endpoints_format():
+    from sn_confluent.core.pem import SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
+    cfg = dm.build_source_config(
+        "ccp-1", "n", "dest", "k", "s", "myinstance", "src", "ks", "kp", "ts", "tp"
+    )
+    ep = cfg["confluent.custom.connection.endpoints"]
+    assert ep.startswith("myinstance.service-now.com:")
+    expected_ports = ",".join(
+        str(base + i) for base in SN_SOURCE_CLUSTERS for i in range(SN_BROKERS_PER_CLUSTER)
+    )
+    assert ep == "myinstance.service-now.com:" + expected_ports
+
+
+def test_build_source_config_endpoints_override():
+    cfg = dm.build_source_config(
+        "ccp-1", "n", "dest", "k", "s", "myinstance", "src", "ks", "kp", "ts", "tp",
+        endpoints="custom.host:9000,9001",
+    )
+    assert cfg["confluent.custom.connection.endpoints"] == "custom.host:9000,9001"
+
+
 # ---------------------------------------------------------------------------
 # validate_keystores
 # ---------------------------------------------------------------------------
