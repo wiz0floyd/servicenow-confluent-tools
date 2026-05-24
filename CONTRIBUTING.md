@@ -13,7 +13,10 @@ sn-confluent/
 │   ├── extract/              # subcommand: PEM extraction
 │   ├── link/                 # subcommand: cluster link creation
 │   ├── mirror/               # subcommand: topic mirroring
+│   ├── worker/               # subcommand: Connect worker config
 │   ├── replicate/            # subcommand: Replicator deployment
+│   ├── deploy/               # subcommand: Hermes custom connector (sink/source)
+│   ├── api_key/              # subcommand: Confluent Cloud API key management
 │   └── setup/                # subcommand: end-to-end wizard
 └── README.md
 ```

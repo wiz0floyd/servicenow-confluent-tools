@@ -11,10 +11,10 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-python extract_pem.py \
-  --keystore path/to/keystore \
-  --truststore path/to/truststore \
-  --out-dir /tmp/pems
+sn-confluent extract \
+    --keystore path/to/keystore \
+    --truststore path/to/truststore \
+    --out-dir /tmp/pems
 ```
 
 Prompts once for the keystore password, then writes:

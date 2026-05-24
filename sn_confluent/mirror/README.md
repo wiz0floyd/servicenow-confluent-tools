@@ -19,7 +19,7 @@ pip install -e .[dev]
 ## Usage
 
 ```bash
-python -m sn_confluent.mirror.main [--config PATH] [--pem-dir PATH] [--filter PREFIX] [--all] [--dry-run]
+sn-confluent mirror [--config PATH] [--pem-dir PATH] [--filter PREFIX] [--all] [--dry-run]
                                    [--include-prefixes PREFIX ...] [--exclude-prefixes PREFIX ...]
                                    [--include-topics TOPIC ...] [--exclude-topics TOPIC ...]
 ```
@@ -27,7 +27,7 @@ python -m sn_confluent.mirror.main [--config PATH] [--pem-dir PATH] [--filter PR
 Default run — shows a checkbox list of topics filtered by `instance_name` from `link.conf`:
 
 ```bash
-python -m sn_confluent.mirror.main --pem-dir /tmp/pems
+sn-confluent mirror --pem-dir /tmp/pems
 ```
 
 ## Options
