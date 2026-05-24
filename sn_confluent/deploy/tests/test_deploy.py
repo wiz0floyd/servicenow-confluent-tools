@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from sn_confluent.deploy import main as dm
+from sn_confluent.core.hermes import HermesClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -194,7 +195,7 @@ def test_list_cc_topics_bad_json_returns_none():
 
 
 # ---------------------------------------------------------------------------
-# list_hermes_topics
+# HermesClient.list_topics
 # ---------------------------------------------------------------------------
 
 def _make_pkcs12_b64():
@@ -225,22 +226,22 @@ def _make_pkcs12_b64():
     return base64.b64encode(p12_bytes).decode("ascii")
 
 
-def test_list_hermes_topics_success():
+def test_hermes_client_list_topics_success():
     p12_b64 = _make_pkcs12_b64()
     ca_pem, cert_pem, key_pem = dm._extract_pem_from_p12(p12_b64, "password", p12_b64, "password")
     mock_admin = MagicMock()
     mock_admin.list_topics.return_value = ["snc.inst.sn_streamconnect.t1", "__consumer_offsets"]
     with patch("kafka.admin.KafkaAdminClient", return_value=mock_admin):
-        result = dm.list_hermes_topics("inst", ca_pem, cert_pem, key_pem)
+        result = HermesClient("inst", ca_pem, cert_pem, key_pem).list_topics()
     assert result == ["snc.inst.sn_streamconnect.t1"]
     assert "__consumer_offsets" not in result
 
 
-def test_list_hermes_topics_connection_error_returns_none():
+def test_hermes_client_list_topics_connection_error_returns_none():
     p12_b64 = _make_pkcs12_b64()
     ca_pem, cert_pem, key_pem = dm._extract_pem_from_p12(p12_b64, "password", p12_b64, "password")
     with patch("kafka.admin.KafkaAdminClient", side_effect=Exception("timeout")):
-        result = dm.list_hermes_topics("inst", ca_pem, cert_pem, key_pem)
+        result = HermesClient("inst", ca_pem, cert_pem, key_pem).list_topics()
     assert result is None
 
 

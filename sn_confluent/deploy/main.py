@@ -17,8 +17,15 @@ import tempfile
 import time
 from typing import List, Optional, Tuple
 
-from sn_confluent.core.pem import check_confluent_cli, ensure_authenticated
+from sn_confluent.core.pem import (
+    check_confluent_cli,
+    ensure_authenticated,
+    SN_SOURCE_CLUSTERS,
+    SN_BROKERS_PER_CLUSTER,
+)
 from sn_confluent.core.config import load_config as _core_load_config
+from sn_confluent.core.hermes import HermesClient
+from sn_confluent.core.confluent import list_cc_topics
 
 SINK_CONNECTOR_CLASS = "com.servicenow.kafka.connect.hermes.HermesSinkConnector"
 SOURCE_CONNECTOR_CLASS = "com.servicenow.kafka.connect.hermes.HermesSourceConnector"
@@ -225,65 +232,6 @@ def _extract_pem_from_p12(
     return ca_pem, client_cert_pem, client_key_pem
 
 
-def list_cc_topics(environment_id: str, cluster_id: str) -> Optional[List[str]]:
-    """Return sorted CC topic names, or None on failure (caller falls back to manual entry)."""
-    result = subprocess.run(
-        [
-            "confluent", "kafka", "topic", "list",
-            "--cluster", cluster_id,
-            "--environment", environment_id,
-            "--output", "json",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        print(f"Warning: Could not list CC topics: {result.stderr.strip()}", file=sys.stderr)
-        return None
-    try:
-        topics = json.loads(result.stdout)
-        return sorted(t["name"] for t in topics)
-    except (json.JSONDecodeError, KeyError):
-        return None
-
-
-def list_hermes_topics(
-    instance_name: str,
-    ca_pem: bytes,
-    client_cert_pem: bytes,
-    client_key_pem: bytes,
-) -> Optional[List[str]]:
-    """Return sorted Hermes topic names via KafkaAdminClient, or None on failure."""
-    try:
-        from kafka.admin import KafkaAdminClient
-    except ImportError:
-        print("Warning: kafka-python not installed; skipping Hermes topic discovery.", file=sys.stderr)
-        return None
-
-    bootstrap = ",".join(f"{instance_name}.service-now.com:{4000 + i}" for i in range(4))
-    admin = None
-    try:
-        admin = KafkaAdminClient(
-            bootstrap_servers=bootstrap,
-            security_protocol="SSL",
-            ssl_cafile_data=ca_pem.decode("utf-8"),
-            ssl_certfile_data=client_cert_pem.decode("utf-8"),
-            ssl_keyfile_data=client_key_pem.decode("utf-8"),
-        )
-        raw = admin.list_topics()
-    except Exception as exc:
-        print(f"Warning: Could not connect to Hermes at {bootstrap}: {exc}", file=sys.stderr)
-        return None
-    finally:
-        if admin is not None:
-            try:
-                admin.close()
-            except Exception:
-                pass
-
-    return sorted(t for t in raw if not t.startswith("__") and not t.startswith("_confluent"))
-
-
 def _resolve_hermes_pem(
     cfg: dict,
     pem_dir: Optional[str],
@@ -420,6 +368,7 @@ def build_source_config(
     truststore_password: str,
     tasks_max: int = 1,
     consumer_group_id: str = "hermes-connect-source",
+    endpoints: Optional[str] = None,
 ) -> dict:
     return {
         "name": connector_name,
@@ -440,12 +389,10 @@ def build_source_config(
         "hermes.ssl.keystore.password": keystore_password,
         "hermes.ssl.truststore.b64": truststore_b64,
         "hermes.ssl.truststore.password": truststore_password,
-        # Two Hermes peer clusters; TODO: verify port ranges and count per cluster
-        "confluent.custom.connection.endpoints": (
+        "confluent.custom.connection.endpoints": endpoints or ",".join(
             f"{instance_name}.service-now.com:"
-            + ",".join(str(p) for p in range(4100, 4108))
-            + f",{instance_name}.service-now.com:"
-            + ",".join(str(p) for p in range(4200, 4208))
+            + ",".join(str(base + i) for i in range(SN_BROKERS_PER_CLUSTER))
+            for base in SN_SOURCE_CLUSTERS
         ),
     }
 
@@ -658,7 +605,7 @@ def _run_sink_wizard(cfg: dict, missing: set) -> dict:
         hermes_pem = _resolve_hermes_pem(cfg, cfg.get("_pem_dir"))
         if hermes_pem and instance_name:
             print(f"Fetching topics from Hermes ({instance_name}.service-now.com)...")
-            hermes_topics = list_hermes_topics(instance_name, *hermes_pem)
+            hermes_topics = HermesClient(instance_name, *hermes_pem).list_topics()
         else:
             hermes_topics = None
 
@@ -730,7 +677,7 @@ def _run_source_wizard(cfg: dict, missing: set) -> dict:
         hermes_pem = _resolve_hermes_pem(cfg, cfg.get("_pem_dir"))
         if hermes_pem and instance_name:
             print(f"Fetching topics from Hermes ({instance_name}.service-now.com)...")
-            hermes_topics = list_hermes_topics(instance_name, *hermes_pem)
+            hermes_topics = HermesClient(instance_name, *hermes_pem).list_topics()
         else:
             hermes_topics = None
 
@@ -1065,6 +1012,22 @@ def _source_main(argv: Optional[List[str]] = None) -> int:
         if not validate_keystores(keystore_b64, keystore_password, truststore_b64, truststore_password):
             sys.exit(1)
 
+    # 7b. Probe actual source cluster broker topology to build precise egress list
+    source_endpoints = None
+    if keystore_b64 and truststore_b64 and instance_name:
+        hermes_pem = _resolve_hermes_pem(cfg, pem_dir)
+        if hermes_pem:
+            print(f"Probing Hermes source cluster topology for {instance_name}...")
+            source_endpoints = HermesClient(instance_name, *hermes_pem).source_egress_endpoints()
+            if source_endpoints:
+                print(f"Discovered egress endpoints: {source_endpoints}")
+            else:
+                print(
+                    "Warning: Could not discover source cluster topology; "
+                    "falling back to default egress ranges (4100-4107, 4200-4207).",
+                    file=sys.stderr,
+                )
+
     # 8. Build connector config
     connector_cfg = build_source_config(
         plugin_id=plugin_id,
@@ -1080,6 +1043,7 @@ def _source_main(argv: Optional[List[str]] = None) -> int:
         truststore_password=truststore_password,
         tasks_max=tasks_max,
         consumer_group_id=consumer_group_id,
+        endpoints=source_endpoints,
     )
 
     # 9. Dry-run: show masked config and exit
