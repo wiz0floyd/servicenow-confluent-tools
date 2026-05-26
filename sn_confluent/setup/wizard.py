@@ -1,6 +1,6 @@
 """End-to-end `sn-confluent setup` wizard.
 
-Orchestrates extract -> link -> mirror -> replicate in a single run, holding
+Orchestrates extract -> link -> mirror in a single run, holding
 state in-memory only (no resume after failure). Each step is a thin shim that
 synthesises an argv slice and calls the relevant subcommand's `main(argv)`.
 
@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
-STEP_NAMES = ("extract", "link", "mirror", "worker", "replicate")
+STEP_NAMES = ("extract", "link", "mirror")
 
 
 @dataclass
@@ -35,10 +35,6 @@ def _import_step(name: str) -> Callable[[Optional[List[str]]], int]:
         from sn_confluent.link.main import main
     elif name == "mirror":
         from sn_confluent.mirror.main import main
-    elif name == "worker":
-        from sn_confluent.worker.main import main
-    elif name == "replicate":
-        from sn_confluent.replicate.main import main
     else:
         raise KeyError(name)
     return main
@@ -51,10 +47,8 @@ def _build_argv(step: str, state: WizardState) -> List[str]:
             "--truststore", state.truststore,
             "--out-dir", state.pem_dir,
         ]
-    if step == "worker":
-        return ["--config", state.link_conf, "--out-dir", state.pem_dir]
     common = ["--config", state.link_conf, "--pem-dir", state.pem_dir]
-    return common  # link/mirror/replicate all take the same shared flags
+    return common  # link/mirror take the same shared flags
 
 
 def _run_step(step: str, state: WizardState) -> int:
@@ -88,7 +82,7 @@ def _collect_inputs(state: WizardState) -> bool:
         questionary.text("PEM output / input directory:", default=state.pem_dir).ask() or state.pem_dir
     )
 
-    if any(s in selected for s in ("link", "mirror", "replicate")):
+    if any(s in selected for s in ("link", "mirror")):
         default_conf = state.link_conf or os.path.join("sn_confluent", "link", "link.conf")
         state.link_conf = questionary.text(
             "Path to link.conf:", default=default_conf
@@ -103,7 +97,7 @@ def _collect_inputs(state: WizardState) -> bool:
 
 def main(argv: Optional[List[str]] = None) -> int:
     print("sn-confluent setup wizard")
-    print("Orchestrates: extract -> link -> mirror -> replicate")
+    print("Orchestrates: extract -> link -> mirror")
     print()
 
     state = WizardState()
@@ -113,7 +107,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     print()
     print(f"Plan: run {', '.join(state.selected_steps)}")
     print(f"  pem_dir   = {state.pem_dir}")
-    if any(s in state.selected_steps for s in ("link", "mirror", "replicate")):
+    if any(s in state.selected_steps for s in ("link", "mirror")):
         print(f"  link.conf = {state.link_conf}")
     if "extract" in state.selected_steps:
         print(f"  keystore  = {state.keystore}")
