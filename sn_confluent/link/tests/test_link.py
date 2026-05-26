@@ -129,6 +129,40 @@ def test_load_config_reads_custom_brokers_per_cluster(tmp_path):
     assert cfg["brokers_per_cluster"] == 2
 
 
+def test_load_config_exits_on_non_integer_source_clusters(tmp_path, capsys):
+    from sn_confluent.link.main import load_config
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id   = env-abc123
+        cluster_id       = lkc-abc123
+        link_name        = test-link
+        source_bootstrap = broker.example.com:9093
+        source_clusters  = 4100, abc
+    """)
+    path = write_config(tmp_path, cfg_text)
+    with pytest.raises(SystemExit) as exc_info:
+        load_config(path)
+    assert exc_info.value.code == 1
+    assert "source_clusters" in capsys.readouterr().err
+
+
+def test_load_config_exits_on_non_integer_brokers_per_cluster(tmp_path, capsys):
+    from sn_confluent.link.main import load_config
+    cfg_text = textwrap.dedent("""\
+        [confluent]
+        environment_id      = env-abc123
+        cluster_id          = lkc-abc123
+        link_name           = test-link
+        source_bootstrap    = broker.example.com:9093
+        brokers_per_cluster = two
+    """)
+    path = write_config(tmp_path, cfg_text)
+    with pytest.raises(SystemExit) as exc_info:
+        load_config(path)
+    assert exc_info.value.code == 1
+    assert "brokers_per_cluster" in capsys.readouterr().err
+
+
 def test_load_config_exits_if_neither_source_key(tmp_path):
     from sn_confluent.link.main import load_config
     bad = textwrap.dedent("""\
