@@ -1,9 +1,8 @@
 """Unified config loader for `link.conf`-style files.
 
 Each subcommand has a different set of required keys (see CONTRACT.md):
-    - link:      environment_id, cluster_id, link_name
-    - mirror:    environment_id, cluster_id, link_name, source_host, instance_name
-    - replicate: environment_id, cluster_id, connector_name, source_host, pem_dir
+    - link:   environment_id, cluster_id, link_name
+    - mirror: environment_id, cluster_id, link_name, source_host, instance_name
 
 The loader is intentionally minimal: read the file, validate required keys,
 and return the section as a dict. Subcommand-specific post-processing (such
