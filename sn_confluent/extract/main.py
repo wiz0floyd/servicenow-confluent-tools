@@ -118,9 +118,18 @@ def _write(path: str, data: bytes) -> None:
 
 
 def _write_private(path: str, data: bytes) -> None:
-    """Write data to path with 0o600 permissions from creation — no world-readable window."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as fh:
+    """Write data to path with 0o600 permissions from creation (Unix: no world-readable window).
+
+    On Windows POSIX mode bits are ignored; set_key_permissions() will emit a warning.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        fh = os.fdopen(fd, "wb")
+    except Exception:
+        os.close(fd)
+        raise
+    with fh:
         fh.write(data)
 
 
