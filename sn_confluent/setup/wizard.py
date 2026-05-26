@@ -36,7 +36,8 @@ def _import_step(name: str) -> Callable[[Optional[List[str]]], int]:
     elif name == "mirror":
         from sn_confluent.mirror.main import main
     else:
-        raise KeyError(name)
+        print(f"Error: unknown setup step '{name}'", file=sys.stderr)
+        sys.exit(1)
     return main
 
 
@@ -61,7 +62,7 @@ def _run_step(step: str, state: WizardState) -> int:
     try:
         rc = main_fn(argv)
     except SystemExit as exc:
-        rc = int(exc.code) if exc.code is not None else 0
+        rc = int(exc.code) if exc.code is not None else 1
     return rc if isinstance(rc, int) else 0
 
 
