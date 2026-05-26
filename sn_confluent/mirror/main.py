@@ -98,6 +98,12 @@ def get_mirrored_source_topics(cfg: dict) -> set:
             text=True,
         )
         if result.returncode != 0:
+            link = cfg.get(f"link_name_{port}", str(port))
+            print(
+                f"Warning: could not list existing mirrors for link {link} "
+                f"({result.stderr.strip()}); [mirrored] labels will be absent.",
+                file=sys.stderr,
+            )
             continue
         try:
             mirrors = json.loads(result.stdout)

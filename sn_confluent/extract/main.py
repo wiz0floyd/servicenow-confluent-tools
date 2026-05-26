@@ -117,6 +117,22 @@ def _write(path: str, data: bytes) -> None:
         fh.write(data)
 
 
+def _write_private(path: str, data: bytes) -> None:
+    """Write data to path with 0o600 permissions from creation (Unix: no world-readable window).
+
+    On Windows POSIX mode bits are ignored; set_key_permissions() will emit a warning.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        fh = os.fdopen(fd, "wb")
+    except Exception:
+        os.close(fd)
+        raise
+    with fh:
+        fh.write(data)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Extract CA and client PEM files from PKCS12 keystores for mTLS."
@@ -148,7 +164,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _write(ca_path, ca_pem)
     _write(cert_path, client_cert_pem)
-    _write(key_path, client_key_pem)
+    _write_private(key_path, client_key_pem)
     set_key_permissions(key_path)
 
     print(f"Written: {ca_path}")
