@@ -98,7 +98,13 @@ def get_mirrored_source_topics(cfg: dict) -> set:
             text=True,
         )
         if result.returncode != 0:
-            continue
+            link = cfg.get(f"link_name_{port}", str(port))
+            print(
+                f"Error: 'confluent kafka mirror list' failed for link {link}: "
+                f"{result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         try:
             mirrors = json.loads(result.stdout)
             for m in mirrors:

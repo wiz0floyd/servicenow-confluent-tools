@@ -67,13 +67,29 @@ def expand_link_config(cfg: dict) -> dict:
     `add_per_cluster_link_names()`.
     """
     clusters_raw = cfg.get("source_clusters", "")
-    cfg["source_clusters"] = (
-        [int(x.strip()) for x in clusters_raw.split(",") if x.strip()]
-        if clusters_raw
-        else list(SN_SOURCE_CLUSTERS)
-    )
+    if clusters_raw:
+        try:
+            cfg["source_clusters"] = [int(x.strip()) for x in clusters_raw.split(",") if x.strip()]
+        except ValueError:
+            print(
+                f"Error: source_clusters in link.conf must be a comma-separated list of integers: {clusters_raw!r}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        cfg["source_clusters"] = list(SN_SOURCE_CLUSTERS)
     bpc_raw = cfg.get("brokers_per_cluster", "")
-    cfg["brokers_per_cluster"] = int(bpc_raw) if bpc_raw else SN_BROKERS_PER_CLUSTER
+    if bpc_raw:
+        try:
+            cfg["brokers_per_cluster"] = int(bpc_raw)
+        except ValueError:
+            print(
+                f"Error: brokers_per_cluster in link.conf must be an integer: {bpc_raw!r}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        cfg["brokers_per_cluster"] = SN_BROKERS_PER_CLUSTER
     return cfg
 
 

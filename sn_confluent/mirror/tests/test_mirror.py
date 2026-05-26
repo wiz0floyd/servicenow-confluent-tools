@@ -207,7 +207,7 @@ def test_get_mirrored_source_topics_strips_prefix():
     assert result == {"foo", "bar", "baz"}
 
 
-def test_get_mirrored_source_topics_returns_empty_on_cli_failure():
+def test_get_mirrored_source_topics_exits_on_cli_failure(capsys):
     from sn_confluent.mirror.main import get_mirrored_source_topics
     link_cfg = {
         "link_name_4100": "servicenow-link-4100",
@@ -215,9 +215,12 @@ def test_get_mirrored_source_topics_returns_empty_on_cli_failure():
         "environment_id": "env-abc123",
         "cluster_id": "lkc-abc123",
     }
-    with patch("sn_confluent.mirror.main.subprocess.run", return_value=MagicMock(returncode=1, stdout="")):
-        result = get_mirrored_source_topics(link_cfg)
-    assert result == set()
+    mock_result = MagicMock(returncode=1, stdout="", stderr="Unauthorized")
+    with patch("sn_confluent.mirror.main.subprocess.run", return_value=mock_result):
+        with pytest.raises(SystemExit) as exc_info:
+            get_mirrored_source_topics(link_cfg)
+    assert exc_info.value.code == 1
+    assert "confluent kafka mirror list" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
