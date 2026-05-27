@@ -68,7 +68,7 @@ def sn_bootstrap(host: str, base_port: int, brokers_per_cluster: int = SN_BROKER
     return ",".join(f"{host}:{base_port + i}" for i in range(brokers_per_cluster))
 
 
-def load_config(path: str) -> dict:
+def load_config(path: str, profile: Optional[str] = None) -> dict:
     """Load link.conf; exit 1 with a clear message on any problem.
 
     Delegates to `sn_confluent.core.config.load_config` for the file/section
@@ -77,7 +77,7 @@ def load_config(path: str) -> dict:
     `expand_link_config()` for `source_clusters` / `brokers_per_cluster`
     coercion with ServiceNow defaults.
     """
-    result = _load_config_core(path, REQUIRED_KEYS)
+    result = _load_config_core(path, REQUIRED_KEYS, profile=profile)
     if "source_bootstrap" not in result and "source_host" not in result:
         print(
             "Error: Missing key in link.conf: source_bootstrap "
@@ -240,6 +240,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Path to link.conf (default: ./link.conf)",
     )
     parser.add_argument(
+        "--profile", default=None,
+        help="Named config profile (INI section in link.conf); omit to use [confluent]",
+    )
+    parser.add_argument(
         "--pem-dir", default=".",
         help="Directory containing ca.pem, client-cert.pem, client-key.pem (default: ./)",
     )
@@ -261,7 +265,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, profile=args.profile)
     ca_pem, client_cert, client_key = load_pem_files(args.pem_dir)
     key_password = _resolve_key_password()
     if key_password is None:

@@ -643,3 +643,81 @@ def test_main_no_warn_when_key_password_set(tmp_path, capsys):
 
     err = capsys.readouterr().err
     assert "SECURITY WARNING" not in err
+
+
+# ---------------------------------------------------------------------------
+# --profile flag
+# ---------------------------------------------------------------------------
+
+PROFILE_CONFIG = textwrap.dedent("""\
+    [DEFAULT]
+    environment_id   = env-prod
+    cluster_id       = lkc-prod
+    link_name        = sn-prod
+    source_bootstrap = broker-prod.example.com:9093
+
+    [dev]
+    environment_id   = env-dev
+    cluster_id       = lkc-dev
+    link_name        = sn-dev
+    source_bootstrap = broker-dev.example.com:9093
+""")
+
+
+def test_load_config_profile_reads_named_section(tmp_path):
+    from sn_confluent.link.main import load_config
+    path = write_config(tmp_path, PROFILE_CONFIG)
+    cfg = load_config(path, profile="dev")
+    assert cfg["environment_id"] == "env-dev"
+    assert cfg["cluster_id"] == "lkc-dev"
+
+
+def test_load_config_profile_inherits_default_keys(tmp_path):
+    from sn_confluent.link.main import load_config
+    partial_profile = textwrap.dedent("""\
+        [DEFAULT]
+        environment_id   = env-prod
+        cluster_id       = lkc-prod
+        link_name        = sn-prod
+        source_bootstrap = broker-prod.example.com:9093
+
+        [dev]
+        environment_id   = env-dev
+    """)
+    path = write_config(tmp_path, partial_profile)
+    cfg = load_config(path, profile="dev")
+    assert cfg["environment_id"] == "env-dev"
+    assert cfg["cluster_id"] == "lkc-prod"   # inherited from DEFAULT
+    assert cfg["link_name"] == "sn-prod"      # inherited from DEFAULT
+
+
+def test_load_config_profile_not_found_exits(tmp_path, capsys):
+    from sn_confluent.link.main import load_config
+    path = write_config(tmp_path, PROFILE_CONFIG)
+    with pytest.raises(SystemExit) as exc:
+        load_config(path, profile="staging")
+    assert exc.value.code == 1
+    assert "staging" in capsys.readouterr().err
+
+
+def test_main_profile_flag_passed_through(tmp_path, capsys):
+    from sn_confluent.link.main import main
+    (tmp_path / "link.conf").write_text(PROFILE_CONFIG)
+    (tmp_path / "ca.pem").write_bytes(b"CA")
+    (tmp_path / "client-cert.pem").write_bytes(b"CERT")
+    (tmp_path / "client-key.pem").write_bytes(b"KEY")
+
+    with patch("sys.argv", [
+        "create_link.py",
+        "--config", str(tmp_path / "link.conf"),
+        "--profile", "dev",
+        "--pem-dir", str(tmp_path),
+        "--dry-run",
+    ]):
+        with patch("sn_confluent.link.main._resolve_key_password", return_value="s3cr3t"):
+            with patch("sn_confluent.link.main.check_confluent_cli"):
+                with patch("sn_confluent.link.main.check_auth"):
+                    rc = main()
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "sn-dev" in out
