@@ -80,7 +80,7 @@ def load_config(path: str, profile: Optional[str] = None) -> dict:
     result = _load_config_core(path, REQUIRED_KEYS, profile=profile)
     if "source_bootstrap" not in result and "source_host" not in result:
         print(
-            "Error: Missing key in link.conf: source_bootstrap "
+            f"Error: Missing key in {path}: source_bootstrap "
             "(or source_host for ServiceNow dual-cluster mode)",
             file=sys.stderr,
         )

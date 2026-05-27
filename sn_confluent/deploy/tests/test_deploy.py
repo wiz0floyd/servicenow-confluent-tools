@@ -7,6 +7,7 @@ import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
+import textwrap
 
 from sn_confluent.deploy import main as dm
 from sn_confluent.core.hermes import HermesClient
@@ -505,8 +506,6 @@ def test_resolve_api_credentials_no_cluster_id_prompts(monkeypatch):
 # --profile flag
 # ---------------------------------------------------------------------------
 
-import textwrap
-
 DEPLOY_PROFILE_CONF = textwrap.dedent("""\
     [DEFAULT]
     environment_id = env-prod
@@ -531,14 +530,8 @@ DEPLOY_PROFILE_CONF = textwrap.dedent("""\
 """)
 
 
-def _write_deploy_conf(tmp_path, content=DEPLOY_PROFILE_CONF):
-    p = tmp_path / "deploy.conf"
-    p.write_text(content)
-    return str(p)
-
-
 def test_load_config_profile_reads_dev_section(tmp_path):
-    path = _write_deploy_conf(tmp_path)
+    path = _write_conf(str(tmp_path), DEPLOY_PROFILE_CONF)
     cfg = dm.load_config(path, profile="dev")
     assert cfg["environment_id"] == "env-dev"
     assert cfg["cluster_id"] == "lkc-dev"
@@ -546,15 +539,14 @@ def test_load_config_profile_reads_dev_section(tmp_path):
 
 
 def test_load_config_profile_inherits_default_keys(tmp_path):
-    path = _write_deploy_conf(tmp_path)
+    path = _write_conf(str(tmp_path), DEPLOY_PROFILE_CONF)
     cfg = dm.load_config(path, profile="dev")
-    # connector_name, topics, etc. not in [dev] — inherited from DEFAULT
-    assert cfg["connector_name"] == "hermes-sink-dev"   # overridden
-    assert cfg["topics"] == "prod-topic"                # inherited
+    assert cfg["connector_name"] == "hermes-sink-dev"   # overridden in [dev]
+    assert cfg["topics"] == "prod-topic"                # inherited from DEFAULT
 
 
 def test_load_config_profile_not_found_exits(tmp_path, capsys):
-    path = _write_deploy_conf(tmp_path)
+    path = _write_conf(str(tmp_path), DEPLOY_PROFILE_CONF)
     with pytest.raises(SystemExit) as exc:
         dm.load_config(path, profile="staging")
     assert exc.value.code == 1
@@ -562,7 +554,7 @@ def test_load_config_profile_not_found_exits(tmp_path, capsys):
 
 
 def test_sink_main_profile_flag_loads_correct_section(tmp_path, capsys):
-    path = _write_deploy_conf(tmp_path)
+    path = _write_conf(str(tmp_path), DEPLOY_PROFILE_CONF)
     with patch("sn_confluent.deploy.main.ensure_authenticated"):
         with patch("sn_confluent.deploy.main.validate_keystores", return_value=True):
             with patch("sn_confluent.deploy.main.resolve_api_credentials", return_value=("K", "S")):
@@ -573,5 +565,24 @@ def test_sink_main_profile_flag_loads_correct_section(tmp_path, capsys):
                 ])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "hermes-sink-dev" in out
+    # env-dev and lkc-dev come from the --environment/--cluster flags in the dry-run command
     assert "env-dev" in out
+    assert "lkc-dev" in out
+    # connector_name appears in the dry-run JSON body
+    assert "hermes-sink-dev" in out
+
+def test_source_main_profile_flag_loads_correct_section(tmp_path, capsys):
+    path = _write_conf(str(tmp_path), DEPLOY_PROFILE_CONF)
+    with patch("sn_confluent.deploy.main.ensure_authenticated"):
+        with patch("sn_confluent.deploy.main.validate_keystores", return_value=True):
+            with patch("sn_confluent.deploy.main.resolve_api_credentials", return_value=("K", "S")):
+                rc = dm._source_main([
+                    "--config", path,
+                    "--profile", "dev",
+                    "--dry-run",
+                ])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "env-dev" in out
+    assert "lkc-dev" in out
+    assert "hermes-sink-dev" in out

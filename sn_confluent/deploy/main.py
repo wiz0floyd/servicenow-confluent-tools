@@ -180,7 +180,7 @@ def resolve_api_credentials(
                 description="sn-confluent deploy (auto-generated)",
             )
             print(f"Generated API key: {api_key}")
-            print("Add to deploy.conf to reuse on subsequent runs:")
+            print("Add to your config file to reuse on subsequent runs:")
             print(f"  kafka_api_key    = {api_key}")
             print(f"  kafka_api_secret = {api_secret}")
         else:
@@ -193,7 +193,7 @@ def resolve_api_credentials(
         print(
             "Error: Confluent Cloud API key and secret are required.\n"
             "Set CC_API_KEY / CC_API_SECRET env vars, or add kafka_api_key / "
-            "kafka_api_secret to deploy.conf.",
+            "kafka_api_secret to your config file.",
             file=sys.stderr,
         )
         sys.exit(1)
