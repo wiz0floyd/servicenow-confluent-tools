@@ -34,14 +34,14 @@ from __future__ import annotations
 import configparser
 import os
 import sys
-from typing import Iterable, List, Optional
+from typing import Iterable
 
 from .pem import SN_SOURCE_CLUSTERS, SN_BROKERS_PER_CLUSTER
 
 CONFIG_SECTION = "confluent"
 
 
-def load_config(path: str, required_keys: Iterable[str], profile: Optional[str] = None) -> dict:
+def load_config(path: str, required_keys: Iterable[str], profile: str | None = None) -> dict:
     """Load an INI-style config file and validate required keys.
 
     Exits with status 1 and a clear stderr message on any failure:
