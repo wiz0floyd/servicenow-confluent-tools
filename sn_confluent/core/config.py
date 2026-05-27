@@ -70,17 +70,24 @@ def load_config(path: str, required_keys: Iterable[str], profile: Optional[str] 
     if profile is None:
         if CONFIG_SECTION not in cfg:
             print(
-                f"Error: link.conf is missing the [{CONFIG_SECTION}] section.",
+                f"Error: {path} is missing the [{CONFIG_SECTION}] section.",
                 file=sys.stderr,
             )
             sys.exit(1)
         section = dict(cfg[CONFIG_SECTION])
     else:
-        if profile not in cfg:
+        # cfg.sections() excludes DEFAULT, so 'DEFAULT' is always rejected here.
+        # configparser treats DEFAULT as a reserved pseudo-section, not a profile.
+        if profile not in cfg.sections():
             available = cfg.sections()
-            available_str = ", ".join(available) if available else "(none)"
+            if available:
+                available_str = ", ".join(available)
+            else:
+                available_str = "(none — add a named section such as [dev] to your config file)"
+            ci_match = next((s for s in available if s.lower() == profile.lower()), None)
+            hint = f" Did you mean '{ci_match}'?" if ci_match else ""
             print(
-                f"Error: Profile '{profile}' not found in {path}. "
+                f"Error: Profile '{profile}' not found in {path}.{hint} "
                 f"Available profiles: {available_str}",
                 file=sys.stderr,
             )
@@ -89,7 +96,7 @@ def load_config(path: str, required_keys: Iterable[str], profile: Optional[str] 
 
     for key in required_keys:
         if key not in section:
-            print(f"Error: Missing key in link.conf: {key}", file=sys.stderr)
+            print(f"Error: Missing required key '{key}' in {path}", file=sys.stderr)
             sys.exit(1)
     return section
 
