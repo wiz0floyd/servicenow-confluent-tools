@@ -21,9 +21,14 @@ behavior. Phase 3 imports must use the `sn_confluent.core.pem` path.
 
 ### `sn_confluent.core.config`
 
-- `load_config(path: str, required_keys: Iterable[str]) -> dict` — loads
-  INI file, validates `[confluent]` section + required keys, exits 1 with
-  stderr message on any failure. Returns raw `dict[str, str]`.
+- `load_config(path: str, required_keys: Iterable[str], profile: str | None = None) -> dict` —
+  loads INI file, validates required keys, exits 1 with stderr message on any
+  failure. Returns raw `dict[str, str]`.
+  - `profile=None` (default): reads `[confluent]` section — Phase 2 behaviour,
+    all existing callers unaffected.
+  - `profile="<name>"`: reads the named section; keys absent from that section
+    are inherited from `[DEFAULT]` via configparser's standard merge. Exits 1
+    with an "available profiles" list if the section does not exist.
 - `expand_link_config(cfg: dict) -> dict` — coerces `source_clusters`
   (list[int]) and `brokers_per_cluster` (int), with ServiceNow defaults.
 - `add_per_cluster_link_names(cfg: dict) -> dict` — mirror-only helper;
