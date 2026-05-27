@@ -35,9 +35,9 @@ KAFKA_CONNECTIONS_MAX_IDLE_MS = 30_000
 REQUIRED_KEYS = ("environment_id", "cluster_id", "link_name", "source_host", "instance_name")
 
 
-def load_config(path: str) -> dict:
+def load_config(path: str, profile: Optional[str] = None) -> dict:
     """Thin wrapper around the shared loader for mirror's required keys."""
-    cfg = _load_config_base(path, REQUIRED_KEYS)
+    cfg = _load_config_base(path, REQUIRED_KEYS, profile=profile)
     cfg = expand_link_config(cfg)
     cfg = add_per_cluster_link_names(cfg)
     return cfg
@@ -216,6 +216,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--config", default=_default_config,
                         help="Path to link.conf (default: ../link/link.conf)")
+    parser.add_argument("--profile", default=None,
+                        help="Named config profile (INI section in link.conf); omit to use [confluent]")
     parser.add_argument("--pem-dir", default=".",
                         help="Directory containing PEM files (default: ./)")
     parser.add_argument("--filter", default=None, metavar="PREFIX",
@@ -245,7 +247,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     args = parse_args(argv)
 
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, profile=args.profile)
     check_confluent_cli()
     check_auth(cfg["environment_id"], cfg["cluster_id"])
     ca, cert, key = load_pem_files(args.pem_dir, return_paths=True)
