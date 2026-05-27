@@ -429,3 +429,55 @@ def test_create_mirror_topics_continues_after_failure():
         failed = create_mirror_topics(cfg, ["foo", "bar"], dry_run=False)
     assert len(failed) == 1
     assert "foo" in failed[0]
+
+
+# ---------------------------------------------------------------------------
+# --profile flag
+# ---------------------------------------------------------------------------
+
+PROFILE_CONFIG = textwrap.dedent("""\
+    [DEFAULT]
+    environment_id = env-prod
+    cluster_id     = lkc-prod
+    link_name      = sn-prod-link
+    source_host    = hermes1.example.com
+    instance_name  = myinstance
+
+    [dev]
+    environment_id = env-dev
+    cluster_id     = lkc-dev
+    link_name      = sn-dev-link
+    source_host    = hermes1-dev.example.com
+""")
+
+
+def test_load_config_profile_reads_named_section(tmp_path):
+    from sn_confluent.mirror.main import load_config
+    path = write_config(tmp_path, PROFILE_CONFIG)
+    cfg = load_config(path, profile="dev")
+    assert cfg["environment_id"] == "env-dev"
+    assert cfg["cluster_id"] == "lkc-dev"
+
+
+def test_load_config_profile_inherits_instance_name_from_default(tmp_path):
+    from sn_confluent.mirror.main import load_config
+    path = write_config(tmp_path, PROFILE_CONFIG)
+    cfg = load_config(path, profile="dev")
+    assert cfg["instance_name"] == "myinstance"   # not in [dev], inherited from DEFAULT
+
+
+def test_load_config_profile_generates_link_names(tmp_path):
+    from sn_confluent.mirror.main import load_config
+    path = write_config(tmp_path, PROFILE_CONFIG)
+    cfg = load_config(path, profile="dev")
+    assert cfg["link_name_4100"] == "sn-dev-link-4100"
+    assert cfg["link_name_4200"] == "sn-dev-link-4200"
+
+
+def test_load_config_profile_not_found_exits(tmp_path, capsys):
+    from sn_confluent.mirror.main import load_config
+    path = write_config(tmp_path, PROFILE_CONFIG)
+    with pytest.raises(SystemExit) as exc:
+        load_config(path, profile="missing")
+    assert exc.value.code == 1
+    assert "missing" in capsys.readouterr().err

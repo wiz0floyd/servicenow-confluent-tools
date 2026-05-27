@@ -71,8 +71,8 @@ In the Confluent Cloud Console:
 """
 
 
-def load_config(path: str) -> dict:
-    return _core_load_config(path, REQUIRED_KEYS)
+def load_config(path: str, profile: Optional[str] = None) -> dict:
+    return _core_load_config(path, REQUIRED_KEYS, profile=profile)
 
 
 def _version_key(path: str) -> tuple:
@@ -180,7 +180,7 @@ def resolve_api_credentials(
                 description="sn-confluent deploy (auto-generated)",
             )
             print(f"Generated API key: {api_key}")
-            print("Add to deploy.conf to reuse on subsequent runs:")
+            print("Add to your config file to reuse on subsequent runs:")
             print(f"  kafka_api_key    = {api_key}")
             print(f"  kafka_api_secret = {api_secret}")
         else:
@@ -193,7 +193,7 @@ def resolve_api_credentials(
         print(
             "Error: Confluent Cloud API key and secret are required.\n"
             "Set CC_API_KEY / CC_API_SECRET env vars, or add kafka_api_key / "
-            "kafka_api_secret to deploy.conf.",
+            "kafka_api_secret to your config file.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -508,6 +508,10 @@ def _build_arg_parser(description: str) -> argparse.ArgumentParser:
         help="Path to deploy.conf (default: ./deploy.conf)",
     )
     parser.add_argument(
+        "--profile", default=None,
+        help="Named config profile (INI section in deploy.conf); omit to use [confluent]",
+    )
+    parser.add_argument(
         "--plugin-id", default=None,
         help="Existing custom plugin ID — skip the upload step",
     )
@@ -726,7 +730,7 @@ def _sink_main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     # 1. Load config
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, profile=args.profile)
 
     # 2. Check confluent CLI is on PATH and authenticated
     ensure_authenticated(cfg)
@@ -903,7 +907,7 @@ def _source_main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     # 1. Load config
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, profile=args.profile)
 
     # 2. Check confluent CLI is on PATH and authenticated
     ensure_authenticated(cfg)
