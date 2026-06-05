@@ -55,3 +55,12 @@ docs/superpowers/
 
 #Claude
 .claude/
+
+# graphify generated knowledge graph (derived artifact; may embed config/secret fragments)
+graphify-out/
+
+# Connector configs and traces — may contain inline keystores/passwords
+connector-*.json
+*-support-ticket.md
+trace_out.txt
+hermes-connector-bundled.zip
